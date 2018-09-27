@@ -5,6 +5,6 @@
 import numpy
 
 from pysc2.agents import base_agent
+from pysc2.agents.base_agent import _xy_locs
 from pysc2.lib import actions
-
 
