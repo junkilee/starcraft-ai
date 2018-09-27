@@ -8,9 +8,9 @@
    - Follow the below link and follow the instructions to down the Linux version of the Starcraft.
    - https://github.com/Blizzard/s2client-proto#downloads
  - Brown Department Machine
-   - Use the below path to find the starcraft
+   - Use the below path to find the Starcraft II.
      - `/research/xai/starcraft/StarCraftII`
-   - Add the above path to your environment variable SC2PATH
+   - Add the above path to your environment variable 'SC2PATH'.
      - `export SC2PATH='/research/xai/starcraft/StarCraftII'`
 
 ## Install miniconda
