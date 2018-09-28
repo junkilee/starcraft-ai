@@ -8,9 +8,14 @@
  - Features descriptions
    - https://github.com/deepmind/pysc2/blob/master/pysc2/lib/features.py
 
-### MoveToBeacon
-### CollectMineralShards
-### CollectMineralShardsFeatureUnits
-### DefeatRoaches
+### Mini Games
+ - MoveToBeacon
+ - CollectMineralShards
+ - CollectMineralShardsFeatureUnits
+ - DefeatRoaches
 
-## 
+## Let us try to implement these other minigames
+ - FindAndDefeatZerglings
+ - DefeatZerglingsAndBanelings
+ - CollectMineralsAndGas
+ - BuildMarines
