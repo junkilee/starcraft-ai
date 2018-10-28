@@ -9,11 +9,12 @@ class ActorCritic(ABC):
         self.state_shape = state_shape
 
     @abstractmethod
-    def actor(self, states):
+    def actor(self, states, action_mask):
         """
         Tensorflow operation that maps states to actions
-        :param states: A tensor of shape [num_instances, num_steps, *state_shape]
-        :return: A tensor of shape [num_instances, num_steps, num_actions]
+        :param states: A tensor of shape [num_steps, *state_shape]
+        :param action_mask: A tensor of shape [num_steps, num_actions]
+        :return: A tensor of shape [num_steps, num_actions]
         """
         pass
 
@@ -21,8 +22,8 @@ class ActorCritic(ABC):
     def critic(self, states):
         """
         Tensorflow operation that maps states to values
-        :param states: A tensor of shape [num_instances, num_steps, *state_shape]
-        :return: A tensor of shape [num_instances, num_steps]
+        :param states: A tensor of shape [num_steps, *state_shape]
+        :return: A tensor of shape [num_steps, num_steps]
         """
         pass
 
@@ -37,19 +38,20 @@ class BasicActorCritic(ActorCritic):
         self.dropout_prob = dropout_prob
 
     def shared_layers(self, state):
-        state = tf.reshape(state, [1, np.prod(self.state_shape)])
+        state = tf.reshape(state, [-1, np.prod(self.state_shape)])
         with tf.variable_scope('shared', reuse=tf.AUTO_REUSE):
             for i, layer_size in enumerate(self.shared_architecture):
                 state = tf.layers.dense(state, layer_size, activation=tf.nn.tanh, name='shared%d' % i)
         return state
 
-    def actor(self, state):
+    def actor(self, state, action_mask):
         state = self.shared_layers(state)
         with tf.variable_scope('actor', reuse=tf.AUTO_REUSE):
             for i, layer_size in enumerate(self.architecture):
                 state = tf.layers.dense(state, layer_size, activation=tf.nn.tanh, name='layer%d' % i)
             probs = tf.layers.dense(state, units=self.num_actions, activation=tf.nn.softmax, name='output')
-        return tf.squeeze(probs)
+        masked = probs * action_mask
+        return masked / tf.reduce_sum(masked, axis=1, keepdims=True)
 
     def critic(self, state):
         state = self.shared_layers(state)
@@ -58,3 +60,41 @@ class BasicActorCritic(ActorCritic):
                 state = tf.layers.dense(state, layer_size, activation=tf.nn.tanh, name='critic%d' % i)
             state = tf.layers.dense(state, 1, activation=None, name='output')
         return tf.squeeze(state, axis=-1)
+
+
+class ConvActorCritic(ActorCritic):
+    def __init__(self, num_actions, state_shape, dropout_prob=0):
+        super().__init__(num_actions, state_shape)
+        self.reward_architecture = (32,)
+        self.dropout_prob = dropout_prob
+
+        self.filters = [16, 16, 16, 16]
+        self.kernel_sizes = [7, 5, 3, 3]
+        self.strides = [3, 2, 1, 1]
+        self.architecture = list(zip(range(len(self.filters)), self.filters, self.kernel_sizes, self.strides))
+
+    def shared_layers(self, state):
+        logits = tf.transpose(state, [0, 3, 2, 1])  # Transpose into channels last format
+        with tf.variable_scope('ac_shared', reuse=tf.AUTO_REUSE):
+            for i, filters, kernel_size, strides in self.architecture:
+                logits = tf.layers.conv2d(logits, filters, kernel_size, strides, activation=tf.nn.leaky_relu,
+                                          kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                                          name='conv%d' % i)
+            logits = tf.layers.flatten(logits)
+            logits = tf.layers.dense(logits, units=64, activation=tf.nn.leaky_relu, name='d1')
+
+        logits = tf.reshape(logits, [-1, 64])
+        return logits
+
+    def actor(self, state, action_mask):
+        features = self.shared_layers(state)
+        with tf.variable_scope('actor', reuse=tf.AUTO_REUSE):
+            probs = tf.layers.dense(features, units=self.num_actions, activation=tf.nn.softmax, name='output')
+        masked = probs * action_mask
+        return masked / tf.reduce_sum(masked, axis=1, keepdims=True)
+
+    def critic(self, state):
+        features = self.shared_layers(state)
+        with tf.variable_scope('critic', reuse=tf.AUTO_REUSE):
+            features = tf.layers.dense(features, units=1, activation=None, name='output')
+        return tf.squeeze(features, axis=-1)
