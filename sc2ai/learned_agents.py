@@ -21,28 +21,31 @@ class RoachesAgent(base_agent.BaseAgent):
         ]
         self.num_actions = len(self.action_options)
         self.actor_critic = ConvActorCritic(num_actions=self.num_actions, state_shape=state_shape)
+
         self.state_input = tf.placeholder(tf.float32, [None, *state_shape], name='state_input')
         self.action_mask_input = tf.placeholder(tf.float32, [None, self.num_actions], name='available_actions')
+        self.discounted_reward_input = tf.placeholder(tf.float32, [None], name='discounted_rewards')
+        self.actions_input = tf.placeholder(tf.int32, [None], name='actions')
 
         self.state_value = self.actor_critic.critic(self.state_input)
         self.actor_probs = self.actor_critic.actor(self.state_input, self.action_mask_input)
 
-        self.discounted_reward_input = tf.placeholder(tf.float32, [None], name='discounted_rewards')
-        self.actions_input = tf.placeholder(tf.int32, [None], name='actions')
+        self.loss_val = self.loss()
+        self.train_op = tf.train.AdamOptimizer(0.001).minimize(self.loss_val)
+
+        self.session = tf.Session()
+        self.session.run(tf.global_variables_initializer())
+        self.states, self.actions, self.rewards, self.action_masks = [], [], [], []
+
+    def loss(self):
         actions_one_hot = tf.one_hot(self.actions_input, self.num_actions)
         action_probs = tf.reduce_sum(self.actor_probs * actions_one_hot, axis=-1)
         advantage = self.discounted_reward_input - self.state_value
 
-        self.entropy_bonus = tf.reduce_sum(0.1 * self.entropy(self.actor_probs))
-        self.critic_loss = tf.reduce_sum(tf.square(advantage))
-        self.actor_loss = -tf.reduce_sum(tf.log(action_probs) * tf.stop_gradient(advantage))
-        self.loss = self.actor_loss - self.entropy_bonus + self.critic_loss
-        self.train_op = tf.train.AdamOptimizer(0.001).minimize(self.loss)
-
-        self.session = tf.Session()
-        self.session.run(tf.global_variables_initializer())
-
-        self.states, self.actions, self.rewards, self.action_masks = [], [], [], []
+        entropy_bonus = tf.reduce_sum(0.1 * self.entropy(self.actor_probs))
+        critic_loss = tf.reduce_sum(tf.square(advantage))
+        actor_loss = -tf.reduce_sum(tf.log(action_probs) * tf.stop_gradient(advantage))
+        return actor_loss - entropy_bonus + critic_loss
 
     @staticmethod
     def entropy(probs):
@@ -87,7 +90,7 @@ class RoachesAgent(base_agent.BaseAgent):
 
     def train_policy(self):
         discounted_rewards = self.discount(self.rewards)
-        loss, _ = self.session.run([self.loss, self.train_op], feed_dict={
+        loss, _ = self.session.run([self.loss_val, self.train_op], feed_dict={
             self.state_input: np.array(self.states),
             self.discounted_reward_input: discounted_rewards,
             self.actions_input: self.actions,
@@ -104,9 +107,6 @@ class RoachesAgent(base_agent.BaseAgent):
             self.train_policy()
         self.states, self.actions, self.rewards, self.action_masks = [], [], [], []
         super().reset()
-
-    def setup(self, obs_spec, action_spec):
-        super().setup(obs_spec, action_spec)
 
     @staticmethod
     def _xy_locs(mask):
