@@ -29,6 +29,10 @@ class ActorCritic(ABC):
 
 
 class BasicActorCritic(ActorCritic):
+    """
+    Actor critic model that takes the entire state and flattens it, and performs feed
+    forward layers on the flattened state.
+    """
     def __init__(self, num_actions, state_shape, architecture=(32, 32), shared_architecture=(),
                  dropout_prob=0):
 
@@ -63,6 +67,10 @@ class BasicActorCritic(ActorCritic):
 
 
 class ConvActorCritic(ActorCritic):
+    """
+    Assumes the state shape is 3 dimensional. Applies some number of convolution layers
+    and feed forward layers.
+    """
     def __init__(self, num_actions, state_shape, dropout_prob=0):
         super().__init__(num_actions, state_shape)
         self.reward_architecture = (32,)

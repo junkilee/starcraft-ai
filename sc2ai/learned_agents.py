@@ -11,7 +11,11 @@ class RoachesAgent(base_agent.BaseAgent):
     def __init__(self):
         super().__init__()
         self.discount_factor = 0.99
+
+        # This is the state shape for the mini-map, represented in channels_first order.
         state_shape = [7, 64, 64]
+
+        # Available moves for agent include attack-moving into the corner.
         self.action_options = [
             actions.FUNCTIONS.Attack_screen('now', [0, 0]),
             actions.FUNCTIONS.Attack_screen('now', [83, 0]),
@@ -22,6 +26,7 @@ class RoachesAgent(base_agent.BaseAgent):
         self.num_actions = len(self.action_options)
         self.actor_critic = ConvActorCritic(num_actions=self.num_actions, state_shape=state_shape)
 
+        # Define all input placeholders
         self.state_input = tf.placeholder(tf.float32, [None, *state_shape], name='state_input')
         self.action_mask_input = tf.placeholder(tf.float32, [None, self.num_actions], name='available_actions')
         self.discounted_reward_input = tf.placeholder(tf.float32, [None], name='discounted_rewards')
@@ -38,6 +43,12 @@ class RoachesAgent(base_agent.BaseAgent):
         self.states, self.actions, self.rewards, self.action_masks = [], [], [], []
 
     def loss(self):
+        """
+        The loss of the actor critic algorithm. Computes the loss for the actor and critic and combines it
+        with the entropy bonus.
+
+        :return: Final loss scalar tensor.
+        """
         actions_one_hot = tf.one_hot(self.actions_input, self.num_actions)
         action_probs = tf.reduce_sum(self.actor_probs * actions_one_hot, axis=-1)
         advantage = self.discounted_reward_input - self.state_value
@@ -49,9 +60,21 @@ class RoachesAgent(base_agent.BaseAgent):
 
     @staticmethod
     def entropy(probs):
+        """
+        Calculates entropy of a distribution
+
+        :param probs: The probabilities in the distribution
+        :return: Entropy
+        """
         return -tf.reduce_sum(probs * tf.log(probs + 1e-10), axis=-1)
 
     def get_action_mask(self, available_actions):
+        """
+        Creates a mask array based on which actions are available
+
+        :param available_actions: List of available action id's provided by pysc2
+        :return: A 1 dimensional mask with 1 if an action is available and 0 if not.
+        """
         mask = np.ones([self.num_actions])
         if actions.FUNCTIONS.Attack_screen.id not in available_actions:
             mask[:4] = 0
@@ -59,6 +82,9 @@ class RoachesAgent(base_agent.BaseAgent):
 
     def step(self, obs):
         """
+        This function is called at each time step. At each step, we collect the (state, action, reward) tuple and
+        save it for training.
+
         :param obs: sc2 observation object
         :return: states, reward, done
         """
@@ -81,6 +107,12 @@ class RoachesAgent(base_agent.BaseAgent):
             return self.action_options[chosen_action_index]
 
     def discount(self, rewards):
+        """
+        Computes sum of discounted rewards for each time step until the end of an episode.
+
+        :param rewards: One dimensional array with the reward at each time step.
+        :return: 1 dimensional array representing sum discounted rewards
+        """
         prev = 0
         discounted_rewards = np.copy(rewards)
         for i in range(1, len(discounted_rewards)):
@@ -89,6 +121,9 @@ class RoachesAgent(base_agent.BaseAgent):
         return discounted_rewards
 
     def train_policy(self):
+        """
+        Trains the policy on the saved (state, action, reward) tuple
+        """
         discounted_rewards = self.discount(self.rewards)
         loss, _ = self.session.run([self.loss_val, self.train_op], feed_dict={
             self.state_input: np.array(self.states),
@@ -101,7 +136,7 @@ class RoachesAgent(base_agent.BaseAgent):
 
     def reset(self):
         """
-        Gets called after each episode. Training occurs here.
+        Gets called after each episode. Trains the agent and then resets all of the saved values.
         """
         if len(self.states) != 0:
             self.train_policy()
