@@ -15,14 +15,19 @@ class RoachesAgent(base_agent.BaseAgent):
         # This is the state shape for the mini-map, represented in channels_first order.
         state_shape = [7, 64, 64]
 
+        points = []
+        for i in range(4):
+            for j in range(4):
+                points.append((i * int(83 / 3), j * int(83 / 3)))
+
         # Available moves for agent include attack-moving into the corner.
         self.action_options = [
-            actions.FUNCTIONS.Attack_screen('now', [0, 0]),
-            actions.FUNCTIONS.Attack_screen('now', [83, 0]),
-            actions.FUNCTIONS.Attack_screen('now', [0, 83]),
-            actions.FUNCTIONS.Attack_screen('now', [83, 83]),
-            actions.FUNCTIONS.select_army('select')
+            actions.FUNCTIONS.select_army('select'),
         ]
+
+        for point in points:
+            self.action_options.append(actions.FUNCTIONS.Attack_screen('now', point))
+
         self.num_actions = len(self.action_options)
         self.actor_critic = ConvActorCritic(num_actions=self.num_actions, state_shape=state_shape)
 
@@ -77,7 +82,7 @@ class RoachesAgent(base_agent.BaseAgent):
         """
         mask = np.ones([self.num_actions])
         if actions.FUNCTIONS.Attack_screen.id not in available_actions:
-            mask[:4] = 0
+            mask[1:] = 0
         return mask
 
     def step(self, obs):
