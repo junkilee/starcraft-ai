@@ -130,12 +130,14 @@ class RoachesAgent(base_agent.BaseAgent):
             self.action_options.append(actions.FUNCTIONS.Attack_screen('now', point))
 
         self.num_actions = len(self.action_options)
+        self.steps_per_action = 20
 
         self.actor = ConvActor(num_actions=self.num_actions, state_shape=state_shape)
         self.critic = ConvCritic(state_shape=state_shape)
         self.optimizer = torch.optim.Adam(list(self.actor.parameters()) + list(self.critic.parameters()), lr=0.0005)
 
         # Define all input placeholders
+        self.reward_buffer = self.step_index = 0
         self.states, self.rewards, self.log_action_probs = [], [], []
 
     def get_action_mask(self, available_actions):
@@ -159,6 +161,7 @@ class RoachesAgent(base_agent.BaseAgent):
         :return: states, reward, done
         """
         super().step(obs)
+        self.reward_buffer += obs.reward + 0.1
 
         player_relative = obs.observation.feature_screen.player_relative
         beacon = (np.array(player_relative) == 3).astype(np.float32)
@@ -166,17 +169,24 @@ class RoachesAgent(base_agent.BaseAgent):
 
         state = np.stack([beacon, player], axis=0)
 
-        if obs.step_type != StepType.FIRST:
-            self.rewards.append(obs.reward)
+        if (self.step_index % self.steps_per_action == 0 and obs.step_type != StepType.FIRST) \
+                or obs.step_type == StepType.LAST:
 
-        if obs.step_type != StepType.LAST:
+            self.rewards.append(self.reward_buffer)
+            self.reward_buffer = 0
+
+        if self.step_index % self.steps_per_action == 0 and obs.step_type != StepType.LAST:
             self.states.append(state)
             action_mask = self.get_action_mask(obs.observation.available_actions)
             chosen_action_index, log_action_prob = self.actor(
                 torch.as_tensor(np.expand_dims(state, axis=0)), action_mask.type(torch.FloatTensor))
 
             self.log_action_probs.append(log_action_prob)
+            self.step_index += 1
             return self.action_options[chosen_action_index]
+
+        self.step_index += 1
+        return actions.FUNCTIONS.no_op()
 
     def discount(self, rewards):
         """
@@ -208,8 +218,9 @@ class RoachesAgent(base_agent.BaseAgent):
         states = torch.as_tensor(np.array(self.states))
         loss_val = self.loss(states, discounted_rewards)
 
-        print("Total reward: %.3f" % np.sum(self.rewards))
-        print("Loss: %.3f" % loss_val.item())
+        # print("Total reward: %.3f" % np.sum(self.rewards))
+        # print("Loss: %.3f" % loss_val.item())
+        print(loss_val.item())
 
         self.optimizer.zero_grad()
         loss_val.backward()
