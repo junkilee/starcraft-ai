@@ -130,7 +130,7 @@ class RoachesAgent(base_agent.BaseAgent):
             self.action_options.append(actions.FUNCTIONS.Attack_screen('now', point))
 
         self.num_actions = len(self.action_options)
-        self.steps_per_action = 20
+        self.steps_per_action = 16
 
         self.actor = ConvActor(num_actions=self.num_actions, state_shape=state_shape)
         self.critic = ConvCritic(state_shape=state_shape)
@@ -161,7 +161,7 @@ class RoachesAgent(base_agent.BaseAgent):
         :return: states, reward, done
         """
         super().step(obs)
-        self.reward_buffer += obs.reward + 0.1
+        self.reward_buffer += obs.reward
 
         player_relative = obs.observation.feature_screen.player_relative
         beacon = (np.array(player_relative) == 3).astype(np.float32)
@@ -220,7 +220,7 @@ class RoachesAgent(base_agent.BaseAgent):
 
         # print("Total reward: %.3f" % np.sum(self.rewards))
         # print("Loss: %.3f" % loss_val.item())
-        print(loss_val.item())
+        print(np.sum(self.rewards))
 
         self.optimizer.zero_grad()
         loss_val.backward()
