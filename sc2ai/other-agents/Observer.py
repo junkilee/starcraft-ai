@@ -103,3 +103,6 @@ class Observer:
     def get_unit(self,tag):
         """Takes in a units tag number and returns the unit corresponding
         that tag"""
+        
+    def health_of_weakest_unit(self,obs):
+        """returns a tuple with the weakest unit's health and tag"""
