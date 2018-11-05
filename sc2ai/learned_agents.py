@@ -153,37 +153,3 @@ class RoachesAgent(base_agent.BaseAgent):
         """Mask should be a set of bools from comparison with a feature layer."""
         y, x = mask.nonzero()
         return list(zip(x, y))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
