@@ -220,12 +220,3 @@ class RoachesAgent(base_agent.BaseAgent):
         self.step_index = 0
         self.states, self.rewards, self.log_action_probs = [], [], []
         super().reset()
-<<<<<<< HEAD
-
-    @staticmethod
-    def _xy_locs(mask):
-        """Mask should be a set of bools from comparison with a feature layer."""
-        y, x = mask.nonzero()
-        return list(zip(x, y))
-=======
->>>>>>> b023ffb21f446fde35bfbe864a6a761b19d4be66

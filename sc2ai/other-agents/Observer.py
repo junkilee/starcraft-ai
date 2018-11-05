@@ -75,7 +75,7 @@ class Observer:
         if num_units != 0:
             return [total_x/num_units,total_y/num_units]
         else:
-            return [-1,-1]
+            return None
 
     def get_center_of_mass_enemies(self,obs):
         """returns the x,y of the center of mass for the enemy units
@@ -92,7 +92,7 @@ class Observer:
         if num_units != 0:
             return [total_x/num_units,total_y/num_units]
         else:
-            return [-1,-1]
+            return None
 
     def get_total_shield(self,obs):
         """returns total shield of allied units"""
