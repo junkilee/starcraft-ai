@@ -2,6 +2,7 @@ import numpy as np
 from pysc2.agents import base_agent
 from pysc2.lib import actions
 from pysc2.env.environment import StepType
+import time
 
 import torch
 import torch.nn.functional as F
@@ -9,48 +10,8 @@ from torch.distributions import Categorical
 from pysc2.lib import features
 
 
-class SimpleActor(torch.nn.Module):
-    def __init__(self, num_actions, state_shape):
-        super().__init__()
-        self.num_actions = num_actions
-        self.state_shape = state_shape
-
-        self.linear1 = torch.nn.Linear(np.prod(self.state_shape), 32)
-        self.linear2 = torch.nn.Linear(32, self.num_actions)
-
-    def forward(self, state, action_mask):
-        logits = state.view(-1, np.prod(self.state_shape))
-        logits = self.linear1(logits)
-        logits = F.relu(logits)
-        logits = self.linear2(logits)
-
-        action_probs = F.softmax(logits, dim=-1)
-
-        masked_probs = action_probs * action_mask.type(torch.FloatTensor)
-        masked_probs = masked_probs / masked_probs.sum()
-        categorical = Categorical(masked_probs)
-        chosen_action_index = categorical.sample()
-        log_action_prob = categorical.log_prob(chosen_action_index)
-        return chosen_action_index, log_action_prob
-
-
-class SimpleCritic(torch.nn.Module):
-    def __init__(self, state_shape):
-        super().__init__()
-        self.state_shape = state_shape
-
-        self.linear1 = torch.nn.Linear(np.prod(self.state_shape), 32)
-        self.linear2 = torch.nn.Linear(32, 1)
-
-    def forward(self, state):
-        logits = state.view(-1, np.prod(self.state_shape))
-        logits = self.linear1(logits)
-        logits = F.relu(logits)
-        return self.linear2(logits)
-
-
 class ConvActor(torch.nn.Module):
-    def __init__(self, num_actions, state_shape):
+    def __init__(self, num_actions, screen_shape, state_shape):
         super().__init__()
         self.num_actions = num_actions
         self.state_shape = state_shape
@@ -59,9 +20,17 @@ class ConvActor(torch.nn.Module):
         self.conv1 = torch.nn.Conv2d(num_input_channels, 32, 5, stride=3)
         self.conv2 = torch.nn.Conv2d(32, 32, 5, stride=3)
         self.conv3 = torch.nn.Conv2d(32, 16, 3)
-
         self.linear1 = torch.nn.Linear(576, 32)
-        self.linear2 = torch.nn.Linear(32, self.num_actions)
+        self.head_non_spacial = torch.nn.Linear(32, self.num_actions)
+        self.head_spacial_x = torch.nn.Linear(32, screen_shape[0])
+        self.head_spacial_y = torch.nn.Linear(32, screen_shape[1])
+
+    @staticmethod
+    def sample(probs):
+        categorical = Categorical(probs)
+        chosen_action_index = categorical.sample()
+        log_action_prob = categorical.log_prob(chosen_action_index)
+        return chosen_action_index, log_action_prob
 
     def forward(self, state, action_mask):
         num_steps = state.shape[0]
@@ -71,15 +40,20 @@ class ConvActor(torch.nn.Module):
         logits = F.relu(self.conv3(logits))
         logits = logits.view(num_steps, -1)
         logits = F.relu(self.linear1(logits))
-        logits = self.linear2(logits)
-        action_probs = F.softmax(logits, dim=-1)
 
-        masked_probs = action_probs * action_mask.type(torch.FloatTensor)
+        non_spacial_probs = F.softmax(self.head_non_spacial(logits), dim=-1)
+        spacial_x_probs = F.softmax(self.head_spacial_x(logits), dim=-1)
+        spacial_y_probs = F.softmax(self.head_spacial_y(logits), dim=-1)
+
+        masked_probs = (non_spacial_probs + 0.00001) * action_mask.type(torch.FloatTensor)
         masked_probs = masked_probs / masked_probs.sum()
-        categorical = Categorical(masked_probs)
-        chosen_action_index = categorical.sample()
-        log_action_prob = categorical.log_prob(chosen_action_index)
-        return chosen_action_index, log_action_prob
+
+        non_spacial_index, non_spacial_log_prob = self.sample(masked_probs)
+        spacial_x, spacial_x_log_prob = self.sample(spacial_x_probs)
+        spacial_y, spacial_y_log_prob = self.sample(spacial_y_probs)
+
+        return non_spacial_index, spacial_x, spacial_y, \
+            ((spacial_x_log_prob + spacial_y_log_prob) * int(non_spacial_index == 0) + non_spacial_log_prob)[0]
 
 
 class ConvCritic(torch.nn.Module):
@@ -104,7 +78,7 @@ class ConvCritic(torch.nn.Module):
         logits = logits.view(num_steps, -1)
         logits = F.relu(self.linear1(logits))
         logits = self.linear2(logits)
-        return logits
+        return torch.squeeze(logits)
 
 
 class RoachesAgent(base_agent.BaseAgent):
@@ -115,30 +89,31 @@ class RoachesAgent(base_agent.BaseAgent):
         # This is the state shape for the mini-map, represented in channels_first order.
         state_shape = [2, 84, 84]
 
-        num_grid_points = (8, 6)  # Number of points going horizontally, vertically
-        points = []
-        for i in range(num_grid_points[0]):
-            for j in range(num_grid_points[1]):
-                points.append((i * int(83 / (num_grid_points[0] - 1)), j * int(63 / (num_grid_points[1] - 1))))
+        self.num_actions = 2
+        self.steps_per_action = 8
 
-        # Available moves for agent include attack-moving into the corner.
-        self.action_options = [
-            actions.FUNCTIONS.select_army('select'),
-        ]
+        self.resolution = 1
+        screen_shape = (84 // self.resolution, 64 // self.resolution)
 
-        for point in points:
-            self.action_options.append(actions.FUNCTIONS.Attack_screen('now', point))
-
-        self.num_actions = len(self.action_options)
-        self.steps_per_action = 16
-
-        self.actor = ConvActor(num_actions=self.num_actions, state_shape=state_shape)
+        self.actor = ConvActor(num_actions=self.num_actions, screen_shape=screen_shape, state_shape=state_shape)
         self.critic = ConvCritic(state_shape=state_shape)
         self.optimizer = torch.optim.Adam(list(self.actor.parameters()) + list(self.critic.parameters()), lr=0.0005)
 
         # Define all input placeholders
+        self.episode_counter = 0
         self.reward_buffer = self.step_index = 0
         self.states, self.rewards, self.log_action_probs = [], [], []
+        self.load()
+
+    def save(self):
+        print('Saving weights')
+        torch.save(self.actor.state_dict(), './weights/actor')
+        torch.save(self.critic.state_dict(), './weights/critic')
+
+    def load(self):
+        print('Loading weights')
+        self.actor.load_state_dict(torch.load('./weights/actor'))
+        self.critic.load_state_dict(torch.load('./weights/critic'))
 
     def get_action_mask(self, available_actions):
         """
@@ -149,7 +124,7 @@ class RoachesAgent(base_agent.BaseAgent):
         """
         mask = np.ones([self.num_actions])
         if actions.FUNCTIONS.Attack_screen.id not in available_actions:
-            mask[1:] = 0
+            mask[0] = 0
         return torch.as_tensor(mask)
 
     def step(self, obs):
@@ -161,6 +136,7 @@ class RoachesAgent(base_agent.BaseAgent):
         :return: states, reward, done
         """
         super().step(obs)
+        time.sleep(0.2)
         self.reward_buffer += obs.reward
 
         player_relative = obs.observation.feature_screen.player_relative
@@ -171,19 +147,22 @@ class RoachesAgent(base_agent.BaseAgent):
 
         if (self.step_index % self.steps_per_action == 0 and obs.step_type != StepType.FIRST) \
                 or obs.step_type == StepType.LAST:
-
             self.rewards.append(self.reward_buffer)
             self.reward_buffer = 0
 
         if self.step_index % self.steps_per_action == 0 and obs.step_type != StepType.LAST:
             self.states.append(state)
             action_mask = self.get_action_mask(obs.observation.available_actions)
-            chosen_action_index, log_action_prob = self.actor(
+            chosen_action_index, x, y, log_action_prob = self.actor(
                 torch.as_tensor(np.expand_dims(state, axis=0)), action_mask.type(torch.FloatTensor))
 
             self.log_action_probs.append(log_action_prob)
             self.step_index += 1
-            return self.action_options[chosen_action_index]
+
+            if chosen_action_index == 0:
+                return actions.FUNCTIONS.Attack_screen('now', (x * self.resolution, y * self.resolution))
+            else:
+                return actions.FUNCTIONS.select_army('select')
 
         self.step_index += 1
         return actions.FUNCTIONS.no_op()
@@ -220,11 +199,17 @@ class RoachesAgent(base_agent.BaseAgent):
 
         # print("Total reward: %.3f" % np.sum(self.rewards))
         # print("Loss: %.3f" % loss_val.item())
-        print(np.sum(self.rewards))
+        with open('rewards.txt', 'a+') as f:
+            rewards = np.sum(self.rewards)
+            f.write('%d\n' % rewards)
 
         self.optimizer.zero_grad()
         loss_val.backward()
         self.optimizer.step()
+
+        if self.episode_counter % 50 == 0:
+            self.save()
+        self.episode_counter += 1
 
     def reset(self):
         """
@@ -232,39 +217,6 @@ class RoachesAgent(base_agent.BaseAgent):
         """
         if len(self.states) != 0:
             self.train_policy()
+        self.step_index = 0
         self.states, self.rewards, self.log_action_probs = [], [], []
         super().reset()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
