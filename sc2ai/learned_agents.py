@@ -30,7 +30,7 @@ class ConvActor(torch.nn.Module):
         categorical = Categorical(probs)
         chosen_action_index = categorical.sample()
         log_action_prob = categorical.log_prob(chosen_action_index)
-        return chosen_action_index, log_action_prob
+        return chosen_action_index, log_action_prob, categorical.entropy()
 
     def forward(self, state, action_mask):
         num_steps = state.shape[0]
@@ -48,12 +48,14 @@ class ConvActor(torch.nn.Module):
         masked_probs = (non_spacial_probs + 0.00001) * action_mask.type(torch.FloatTensor)
         masked_probs = masked_probs / masked_probs.sum()
 
-        non_spacial_index, non_spacial_log_prob = self.sample(masked_probs)
-        spacial_x, spacial_x_log_prob = self.sample(spacial_x_probs)
-        spacial_y, spacial_y_log_prob = self.sample(spacial_y_probs)
+        non_spacial_index, non_spacial_log_prob, non_spacial_entropy = self.sample(masked_probs)
+        x, x_log_prob, x_entropy = self.sample(spacial_x_probs)
+        y, y_log_prob, y_entropy = self.sample(spacial_y_probs)
 
-        return non_spacial_index, spacial_x, spacial_y, \
-            ((spacial_x_log_prob + spacial_y_log_prob) * int(non_spacial_index == 0) + non_spacial_log_prob)[0]
+        joint_entropy = non_spacial_entropy + x_entropy + y_entropy  # Slightly inaccurate but close enough
+        joint_log_prob = ((x_log_prob + y_log_prob) * int(non_spacial_index == 0) + non_spacial_log_prob)[0]
+
+        return non_spacial_index, x, y, joint_entropy, joint_log_prob
 
 
 class ConvCritic(torch.nn.Module):
@@ -102,8 +104,8 @@ class RoachesAgent(base_agent.BaseAgent):
         # Define all input placeholders
         self.episode_counter = 0
         self.reward_buffer = self.step_index = 0
-        self.states, self.rewards, self.log_action_probs = [], [], []
-        self.load()
+        self.states, self.rewards, self.log_action_probs, self.entropys = [], [], [], []
+        # self.load()
 
     def save(self):
         print('Saving weights')
@@ -136,7 +138,6 @@ class RoachesAgent(base_agent.BaseAgent):
         :return: states, reward, done
         """
         super().step(obs)
-        time.sleep(0.2)
         self.reward_buffer += obs.reward
 
         player_relative = obs.observation.feature_screen.player_relative
@@ -153,9 +154,10 @@ class RoachesAgent(base_agent.BaseAgent):
         if self.step_index % self.steps_per_action == 0 and obs.step_type != StepType.LAST:
             self.states.append(state)
             action_mask = self.get_action_mask(obs.observation.available_actions)
-            chosen_action_index, x, y, log_action_prob = self.actor(
+            chosen_action_index, x, y, entropy, log_action_prob = self.actor(
                 torch.as_tensor(np.expand_dims(state, axis=0)), action_mask.type(torch.FloatTensor))
 
+            self.entropys.append(entropy)
             self.log_action_probs.append(log_action_prob)
             self.step_index += 1
 
@@ -187,7 +189,7 @@ class RoachesAgent(base_agent.BaseAgent):
         actor_loss = -torch.stack(self.log_action_probs) * advantage.data
         critic_loss = advantage.pow(2)
 
-        return actor_loss.mean() + 0.5 * critic_loss.mean()
+        return actor_loss.mean() + 0.5 * critic_loss.mean() - 0.1 * torch.stack(self.entropys).mean()
 
     def train_policy(self):
         """
@@ -218,5 +220,5 @@ class RoachesAgent(base_agent.BaseAgent):
         if len(self.states) != 0:
             self.train_policy()
         self.step_index = 0
-        self.states, self.rewards, self.log_action_probs = [], [], []
+        self.states, self.rewards, self.log_action_probs, self.entropys = [], [], [], []
         super().reset()
