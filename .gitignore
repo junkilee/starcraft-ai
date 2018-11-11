@@ -110,3 +110,7 @@ venv.bak/
 # mypy
 .mypy_cache/
 .idea/
+
+sc2ai/weights/*
+rewards.txt
+images/
