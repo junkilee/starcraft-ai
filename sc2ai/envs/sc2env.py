@@ -1,10 +1,15 @@
+import logging
+
 import gym
 from gym.utils import closer
+
 env_closer = closer.Closer()
 
 from pysc2.env import sc2_env
 from pysc2.lib import actions
 from pysc2.env.environment import StepType
+
+from game_info import ActionIDs
 
 class SC2Env(gym.Env):
     metadata = {'render.modes': [None, 'human']}
@@ -20,9 +25,12 @@ class SC2Env(gym.Env):
         super().__init__()
         self._kwargs = kwargs
         self._sc2_env = None
+        self._available_actions = None
+        self._observation_spec = None
 
-    def _initialize_sc2env(self):
+    def _init_sc2_env(self):
         self._sc2_env = sc2_env.SC2Env(**self._kwargs)
+        self._observation_spec = self._sc2_env.observation_spec()
 
     # for backward and forward compatibility
     def seed(self, seed=None):
@@ -57,17 +65,50 @@ class SC2Env(gym.Env):
     def spec(self):
         return self._spec
 
+    @property
+    def observation_spec(self):
+        if self._sc2_env is None:
+            self._init_sc2_env()
+        return self._observation_spec
+    
+    @property
+    def available_actions(self):
+        return self._available_actions
+
     def _seed(self, seed=None):
-        pass
+        self._seed = seed
     
     def _step(self, action):
-        pass
+        """
+        action  expects a tuple which has a specification of an action containing a kind and arguments.
+        """
+        if action[0] not in self._available_actions:
+            logging.warning("The chosen action is not available: %s", action)
+            action = [ActionIDs.NO_OP]
+
+        try:
+            obs = self._sc2_env.step([actions.FunctionCall(action[0], action[1:])])[0]
+        except KeyboardInterrupt:
+            logging.info("Keyboard Interruption.")
+            return None, 0, True, {}
+        except Exception:
+            logger.exception("An unexpected exception occured.")
+            return None, 0, True, {}
+        self.available_actions = obs.observation['available_actions']
+        reward = obs.reward
+        return obs, reward, obs.step_type == StepType.LAST, {}
 
     def _reset(self):
-        pass
+        if self._sc2_env is None:
+            self._init_sc2_env()
+        obs = self._sc2_env.reset()[0]
+        self.available_actions = obs.observation['available_actions']
+        return obs
     
     def _render(self, mode='human', close=False): 
         pass
 
     def _close(self):
-        pass
+        if self._sc2_env is not None:
+            self._sc2_env.close()
+        super()._close()
