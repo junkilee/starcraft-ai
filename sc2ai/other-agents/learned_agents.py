@@ -7,11 +7,10 @@ from sc2ai.actor_critic import ConvActorCritic
 
 
 class RoachesAgent(base_agent.BaseAgent):
-    def __init__(self, model, use_cuda):
+    def __init__(self, model, use_cuda=False):
         super().__init__()
         self.discount_factor = 0.99
 
-        use_cuda = False
         self.device = torch.device('cuda' if use_cuda else 'cpu')
         self.dtype = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 
@@ -65,7 +64,6 @@ class RoachesAgent(base_agent.BaseAgent):
         player_relative = obs.observation.feature_screen.player_relative
         beacon = (np.array(player_relative) == 3).astype(np.float32)
         player = (np.array(player_relative) == 1).astype(np.float32)
-
         state = np.stack([beacon, player], axis=0)
 
         if obs.step_type != StepType.FIRST:

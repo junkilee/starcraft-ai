@@ -1,5 +1,4 @@
-#!/usr/bin/python
-# Copyright 2017 Google Inc. All Rights Reserved.
+#!/usr/bin/python# Copyright 2017 Google Inc. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,23 +17,19 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import importlib
-from multiprocessing import Queue, Pipe, Process
-import time
+from multiprocessing import Pipe, Process
+import numpy as np
 
 from absl import app
 from absl import flags
 from future.builtins import range  # pylint: disable=redefined-builtin
 
-from pysc2 import maps
-from pysc2.env import available_actions_printer
 from pysc2.env import sc2_env
 from pysc2.lib import point_flag
-from pysc2.lib import stopwatch
-import torch
+from pysc2.env.environment import StepType
 
-from sc2ai.actor_critic import ConvActorCritic
 from sc2ai.learner import Learner
+from pysc2.lib import actions as pysc2_actions
 
 FLAGS = flags.FLAGS
 flags.DEFINE_bool("render", True, "Whether to render with pygame.")
@@ -84,45 +79,49 @@ flags.DEFINE_string("map", None, "Name of a map to use.")
 flags.mark_flag_as_required("map")
 
 
-def run_loop(agents, env, max_frames=0, max_episodes=0):
-    """A run loop to have agents and an environment interact."""
-    total_frames = 0
-    total_episodes = 0
-    start_time = time.time()
+class RoachesEnvironmentInterface:
+    """
+    Facilitates communication between the agent and the environment.
+    """
 
-    observation_spec = env.observation_spec()
-    action_spec = env.action_spec()
-    for agent, obs_spec, act_spec in zip(agents, observation_spec, action_spec):
-        agent.setup(obs_spec, act_spec)
+    def __init__(self):
+        self.state_shape = [2, 84, 84]
+        self.screen_shape = [84, 63]
+        self.num_actions = 2
 
-    try:
-        while not max_episodes or total_episodes < max_episodes:
-            total_episodes += 1
-            timesteps = env.reset()
-            for a in agents:
-                a.reset()
-            while True:
-                total_frames += 1
-                actions = [agent.step(timestep)
-                           for agent, timestep in zip(agents, timesteps)]
-                if max_frames and total_frames >= max_frames:
-                    return
-                if timesteps[0].last():
-                    break
-                timesteps = env.step(actions)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        elapsed_time = time.time() - start_time
-        print("Took %.3f seconds for %s steps: %.3f fps" % (
-            elapsed_time, total_frames, total_frames / elapsed_time))
+    def _get_action_mask(self, timestep):
+        mask = np.ones([self.num_actions])
+        if pysc2_actions.FUNCTIONS.Attack_screen.id not in timestep.observation.available_actions:
+            mask[0] = 0
+        return mask
+
+    def convert_action(self, *action):
+        """
+        Converts an action output from the agent into a pysc2 action.
+        :return: pysc2 action object
+        """
+        action_index, x, y = action
+        if action_index == 0:
+            return pysc2_actions.FUNCTIONS.Attack_screen('now', (x, y))
+        else:
+            return pysc2_actions.FUNCTIONS.select_army('select')
+
+    def convert_state(self, timestep):
+        """
+        :param timestep: Timestep obtained from pysc2 environment step.
+        :return: Tuple of converted state (shape self.state_shape) and action mask
+        """
+        player_relative = timestep.observation.feature_screen.player_relative
+        beacon = (np.array(player_relative) == 3).astype(np.float32)
+        player = (np.array(player_relative) == 1).astype(np.float32)
+        return np.stack([beacon, player], axis=0), self._get_action_mask(timestep)
 
 
-def run_thread(agent_classes, players, map_name, visualize, args):
-    """Run one thread worth of the environment with agents."""
-    with sc2_env.SC2Env(
+class SCEnvironmentWrapper:
+    def __init__(self, map_name, agent_interface, visualize):
+        self.env = sc2_env.SC2Env(
             map_name=map_name,
-            players=players,
+            players=[sc2_env.Agent(sc2_env.Race[FLAGS.agent_race])],
             agent_interface_format=sc2_env.parse_agent_interface_format(
                 feature_screen=FLAGS.feature_screen_size,
                 feature_minimap=FLAGS.feature_minimap_size,
@@ -133,81 +132,89 @@ def run_thread(agent_classes, players, map_name, visualize, args):
             step_mul=FLAGS.step_mul,
             game_steps_per_episode=FLAGS.game_steps_per_episode,
             disable_fog=FLAGS.disable_fog,
-            visualize=visualize) as env:
-        env = available_actions_printer.AvailableActionsPrinter(env)
-        agents = [agent_cls(*args) for agent_cls in agent_classes]
-        run_loop(agents, env, FLAGS.max_agent_steps, FLAGS.max_episodes)
-        if FLAGS.save_replay:
-            env.save_replay(agent_classes[0].__name__)
+            visualize=visualize)
+        self.env.__enter__()
+        self.curr_timestep = None
+        self.agent_interface = agent_interface
+
+    # TODO: Check the right timestep is being sent in
+    def step(self, action):
+        timestep = self.curr_timestep
+        self.curr_timestep = self.env.step([self.agent_interface.convert_action(*action)])[0]
+        reward = self.curr_timestep.reward
+        done = int(self.curr_timestep.step_type == StepType.LAST)
+        state, action_mask = self.agent_interface.convert_state(timestep)
+        return state, action_mask, reward, done
+
+    def reset(self):
+        self.curr_timestep = self.env.reset()[0]
+        state, action_mask = self.agent_interface.convert_state(self.curr_timestep)
+        return state, action_mask,  0, int(False)
+
+    def close(self):
+        self.env.__exit__(None, None, None)
+
+
+def run_process(env_factory, pipe):
+    environment = env_factory()
+    while True:
+        endpoint, data = pipe.recv()
+
+        if endpoint == 'step':
+            pipe.send(environment.step(data))
+        elif endpoint == 'reset':
+            pipe.send(environment.reset())
+        elif endpoint == 'close':
+            environment.close()
+            pipe.close()
+        else:
+            raise Exception("Unsupported endpoint")
+
+
+class MultipleEnvironment:
+    def __init__(self, env_factory, num_instance=1):
+        self.pipes = []
+        self.processes = []
+        self.num_instances = num_instance
+        for process_id in range(num_instance):
+            parent_conn, child_conn = Pipe()
+            self.pipes.append(parent_conn)
+            p = Process(target=run_process, args=(env_factory, child_conn))
+            self.processes.append(p)
+            p.start()
+
+    def step(self, actions):
+        for pipe, action in zip(self.pipes, actions):
+            pipe.send(('step', action))
+        return self.get_results()
+
+    def reset(self):
+        for pipe in self.pipes:
+            pipe.send(('reset', None))
+        return self.get_results()
+
+    def get_results(self):
+        states, masks, rewards, dones = zip(*[pipe.recv() for pipe in self.pipes])
+        return np.stack(states), np.stack(masks), np.stack(rewards), np.stack(dones)
+
+    def close(self):
+        for pipe in self.pipes:
+            pipe.send(('close', None))
+        for process in self.processes:
+            process.join()
 
 
 def main(unused_argv):
-    """Run an agent."""
-    stopwatch.sw.enabled = FLAGS.profile or FLAGS.trace
-    stopwatch.sw.trace = FLAGS.trace
+    interface = RoachesEnvironmentInterface()
+    environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(FLAGS.map, interface, visualize=False),
+                                      num_instance=FLAGS.parallel)
+    learner = Learner(environment, interface, use_cuda=True)
 
-    map_inst = maps.get(FLAGS.map)
-
-    agent_classes = []
-    players = []
-
-    agent_module, agent_name = FLAGS.agent.rsplit(".", 1)
-    agent_cls = getattr(importlib.import_module(agent_module), agent_name)
-    agent_classes.append(agent_cls)
-
-    # players.append(sc2_env.Agent(sc2_env.Race[FLAGS.agent_race], name=FLAGS.agent_name or agent_name))
-    players.append(sc2_env.Agent(sc2_env.Race[FLAGS.agent_race]))
-
-    if map_inst.players >= 2:
-        if FLAGS.agent2 == "Bot":
-            players.append(sc2_env.Bot(sc2_env.Race[FLAGS.agent2_race],
-                                       sc2_env.Difficulty[FLAGS.difficulty]))
-        else:
-            agent_module, agent_name = FLAGS.agent2.rsplit(".", 1)
-            agent_cls = getattr(importlib.import_module(agent_module), agent_name)
-            agent_classes.append(agent_cls)
-            players.append(sc2_env.Agent(sc2_env.Race[FLAGS.agent2_race],
-                                         FLAGS.agent2_name or agent_name))
-
-    use_cuda = True
-    processes = []
-
-    if not use_cuda:
-        state_shape = [2, 84, 84]
-        num_actions = 2
-        screen_shape = (84, 64)
-
-        device = torch.device('cpu')
-        model = ConvActorCritic(num_actions, screen_shape, state_shape).to(device).share_memory()
-
-        for process_id in range(FLAGS.parallel - 1):
-            p = Process(target=run_thread, args=(agent_classes, players, FLAGS.map, False, [model, False]))
-            p.start()
-            processes.append(p)
-        run_thread(agent_classes, players, FLAGS.map, False, model)
-
-    else:
-        pipes = []
-        data_queue = Queue()
-        for process_id in range(FLAGS.parallel):
-            parent_conn, child_conn = Pipe()
-            pipes.append(parent_conn)
-            p = Process(target=run_thread, args=(agent_classes, players, FLAGS.map, FLAGS.render,
-                                                 [data_queue, child_conn, process_id]))
-            processes.append(p)
-            p.start()
-
-        Learner(data_queue, pipes)
-
-    for p in processes:
-        p.join()
-
-    if FLAGS.profile:
-        print(stopwatch.sw)
-
-
-def entry_point():  # Needed so setup.py scripts work.
-    app.run(main)
+    try:
+        for i in range(1000):
+            learner.train_episode()
+    finally:
+        environment.close()
 
 
 if __name__ == "__main__":

@@ -48,8 +48,8 @@ class ConvActorCritic(torch.nn.Module):
         x, x_log_prob, x_entropy = self.sample(spacial_x_probs)
         y, y_log_prob, y_entropy = self.sample(spacial_y_probs)
 
-        joint_entropy = non_spacial_entropy + x_entropy + y_entropy  # Slightly inaccurate but close enough
+        joint_entropy = non_spacial_entropy + x_entropy + y_entropy
         joint_log_prob = (x_log_prob + y_log_prob) * (non_spacial_index == 0).type(self.dtype) \
                             + non_spacial_log_prob
 
-        return non_spacial_index, x, y, joint_entropy, joint_log_prob, critic_value
+        return non_spacial_index, x, y, joint_entropy, joint_log_prob, torch.squeeze(critic_value)
