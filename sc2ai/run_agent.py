@@ -17,6 +17,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+import psutil
+
 from multiprocessing import Pipe, Process
 import numpy as np
 
@@ -133,7 +136,6 @@ class SCEnvironmentWrapper:
             game_steps_per_episode=FLAGS.game_steps_per_episode,
             disable_fog=FLAGS.disable_fog,
             visualize=visualize)
-        self.env.__enter__()
         self.curr_timestep = None
         self.agent_interface = agent_interface
 
@@ -155,10 +157,24 @@ class SCEnvironmentWrapper:
         self.env.__exit__(None, None, None)
 
 
-def run_process(env_factory, pipe):
-    environment = env_factory()
+def run_process(pipe):
+    # environment = env_factory()
+    environment = SCEnvironmentWrapper(FLAGS.map, RoachesEnvironmentInterface(), visualize=False)
+
+    # process = psutil.Process(os.getpid())
+    # print("MEMORY USED")
+    # print(process.memory_info().rss)
+
     while True:
+        # print("MEMORY USED BEFORE RECEIVING")
+        # print(process.memory_info().rss)
+
         endpoint, data = pipe.recv()
+
+        # print("MEMORY USED AFTER RECEIVING")
+        # print("ENDPOINT %s" % endpoint)
+        # print(data)
+        # print(process.memory_info().rss)
 
         if endpoint == 'step':
             pipe.send(environment.step(data))
@@ -172,14 +188,14 @@ def run_process(env_factory, pipe):
 
 
 class MultipleEnvironment:
-    def __init__(self, env_factory, num_instance=1):
+    def __init__(self, num_instance=1):
         self.pipes = []
         self.processes = []
         self.num_instances = num_instance
         for process_id in range(num_instance):
             parent_conn, child_conn = Pipe()
             self.pipes.append(parent_conn)
-            p = Process(target=run_process, args=(env_factory, child_conn))
+            p = Process(target=run_process, args=(child_conn,))
             self.processes.append(p)
             p.start()
 
@@ -206,8 +222,7 @@ class MultipleEnvironment:
 
 def main(unused_argv):
     interface = RoachesEnvironmentInterface()
-    environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(FLAGS.map, interface, visualize=False),
-                                      num_instance=FLAGS.parallel)
+    environment = MultipleEnvironment(num_instance=FLAGS.parallel)
     learner = Learner(environment, interface, use_cuda=True)
 
     try:

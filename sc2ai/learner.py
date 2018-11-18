@@ -25,7 +25,8 @@ class Learner:
             action_masks = torch.as_tensor(np.stack(action_masks), device=self.device).type(self.dtype)
 
             action_indices, x, y, entropys, log_action_probs, critic_values = self.actor(state, action_masks)
-            states, action_masks, rewards, dones = self.env.step(zip(action_indices, x, y))
+            states, action_masks, rewards, dones = \
+                self.env.step(zip(action_indices.cpu().numpy(), x.cpu().numpy(), y.cpu().numpy()))
             yield critic_values, rewards, entropys, log_action_probs, dones  # TODO: Check OBOE done
 
     def train_episode(self):
