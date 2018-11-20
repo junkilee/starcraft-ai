@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import psutil
+import time
 
 from multiprocessing import Pipe, Process
 import numpy as np
@@ -135,46 +136,30 @@ class SCEnvironmentWrapper:
             step_mul=FLAGS.step_mul,
             game_steps_per_episode=FLAGS.game_steps_per_episode,
             disable_fog=FLAGS.disable_fog,
-            visualize=visualize)
-        self.curr_timestep = None
+            visualize=bool(visualize))
         self.agent_interface = agent_interface
 
-    # TODO: Check the right timestep is being sent in
     def step(self, action):
-        timestep = self.curr_timestep
-        self.curr_timestep = self.env.step([self.agent_interface.convert_action(*action)])[0]
-        reward = self.curr_timestep.reward
-        done = int(self.curr_timestep.step_type == StepType.LAST)
+        timestep = self.env.step([self.agent_interface.convert_action(*action)])[0]
+        reward = timestep.reward
+        done = int(timestep.step_type == StepType.LAST)
         state, action_mask = self.agent_interface.convert_state(timestep)
         return state, action_mask, reward, done
 
     def reset(self):
-        self.curr_timestep = self.env.reset()[0]
-        state, action_mask = self.agent_interface.convert_state(self.curr_timestep)
+        timestep = self.env.reset()[0]
+        state, action_mask = self.agent_interface.convert_state(timestep)
         return state, action_mask,  0, int(False)
 
     def close(self):
         self.env.__exit__(None, None, None)
 
 
-def run_process(pipe):
-    # environment = env_factory()
-    environment = SCEnvironmentWrapper(FLAGS.map, RoachesEnvironmentInterface(), visualize=False)
-
-    # process = psutil.Process(os.getpid())
-    # print("MEMORY USED")
-    # print(process.memory_info().rss)
+def run_process(env_factory, pipe):
+    environment = env_factory()
 
     while True:
-        # print("MEMORY USED BEFORE RECEIVING")
-        # print(process.memory_info().rss)
-
         endpoint, data = pipe.recv()
-
-        # print("MEMORY USED AFTER RECEIVING")
-        # print("ENDPOINT %s" % endpoint)
-        # print(data)
-        # print(process.memory_info().rss)
 
         if endpoint == 'step':
             pipe.send(environment.step(data))
@@ -188,14 +173,14 @@ def run_process(pipe):
 
 
 class MultipleEnvironment:
-    def __init__(self, num_instance=1):
+    def __init__(self, env_factory, num_instance=1):
         self.pipes = []
         self.processes = []
         self.num_instances = num_instance
         for process_id in range(num_instance):
             parent_conn, child_conn = Pipe()
             self.pipes.append(parent_conn)
-            p = Process(target=run_process, args=(child_conn,))
+            p = Process(target=run_process, args=(env_factory, child_conn,))
             self.processes.append(p)
             p.start()
 
@@ -222,12 +207,18 @@ class MultipleEnvironment:
 
 def main(unused_argv):
     interface = RoachesEnvironmentInterface()
-    environment = MultipleEnvironment(num_instance=FLAGS.parallel)
+    environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(FLAGS.map, interface,
+                                                                   visualize=FLAGS.render),
+                                      num_instance=FLAGS.parallel)
     learner = Learner(environment, interface, use_cuda=True)
 
     try:
-        for i in range(1000):
-            learner.train_episode()
+        if FLAGS.max_episodes == 0:
+            while True:
+                learner.train_episode()
+        else:
+            for i in range(FLAGS.max_episodes):
+                learner.train_episode()
     finally:
         environment.close()
 
