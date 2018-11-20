@@ -6,7 +6,7 @@ from sc2ai.actor_critic import ConvActorCritic
 class Learner:
     def __init__(self, environment, agent_interface, use_cuda=True):
         self.reward_discount = 0.75
-        # self.td_lambda = 1
+        self.td_lambda = 0.9
 
         self.device = torch.device('cuda' if use_cuda else 'cpu')
         self.dtype = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
@@ -33,7 +33,8 @@ class Learner:
             if not all(dones):
                 states, action_masks, rewards, next_dones = \
                     self.env.step(zip(action_indices.cpu().numpy(), x.cpu().numpy(), y.cpu().numpy()))
-
+            else:
+                rewards = [None] * len(states)
             yield critic_values, rewards, entropys, log_action_probs, dones
             if all(dones):
                 break
@@ -53,7 +54,7 @@ class Learner:
         self.optimizer.step()
 
         for reward in rewards:
-            self.log_data(np.sum(reward))
+            self.log_data(np.sum(reward[:-1]))
 
     def save(self):
         print('Saving weights')
@@ -71,43 +72,25 @@ class Learner:
             self.save()
         self.episode_counter += 1
 
-    # def actor_critic_loss_new(self, rewards, values, log_action_probs, entropys, dones):
-        # seq_length = dones.shape[0] - np.sum(dones)
-        #
-        # rewards = torch.as_tensor(np.array(rewards), device=self.device).type(self.dtype)
-        # td_errors = rewards + self.reward_discount * values[1:seq_length + 1] - values[:seq_length]
-        #
-        # discount_old = self.discount_old(rewards)
-        # advantage_old = discount_old - values
-        # # advantage = self.discount(td_errors, discount_factor=self.td_lambda * self.reward_discount)
-        #
-        # advantage = advantage_old
-        #
-        # actor_loss = -log_action_probs.type(self.dtype) * advantage.data
-        # critic_loss = advantage.pow(2)
-        # return actor_loss.mean() + 0.5 * critic_loss.mean()  # - 0.01 * entropys.mean()
+    def actor_critic_loss(self, rewards, values, log_action_probs, entropys, dones):
+        seq_length = dones.shape[0] - np.sum(dones)
 
-    def actor_critic_loss(self, rewards, critic_values, log_action_probs, entropys, dones):
-        discounted_rewards = self.discount_old(rewards, discount_factor=self.reward_discount)
-        advantage = discounted_rewards.type(self.dtype) - critic_values
+        rewards = torch.as_tensor(rewards[:seq_length].astype(np.float32), device=self.device).type(self.dtype)
+        td_errors = rewards + self.reward_discount * values[1:seq_length + 1] - values[:seq_length]
 
-        actor_loss = -log_action_probs.type(self.dtype) * advantage.data
+        advantage = self.discount(td_errors, discount_factor=self.td_lambda * self.reward_discount)
+        normalizing_factor = 1 if self.td_lambda is 1 else 1 / (1 - self.td_lambda ** np.arange(seq_length, 0, -1))
+        advantage = advantage * torch.as_tensor(normalizing_factor, device=self.device).type(self.dtype)
+
+        actor_loss = -log_action_probs.type(self.dtype)[:-1] * advantage.data
         critic_loss = advantage.pow(2)
         return actor_loss.mean() + 0.5 * critic_loss.mean() - 0.01 * entropys.mean()
 
-    # @staticmethod
-    # def discount(values, discount_factor=0.99):
-    #     prev = 0
-    #     discounted = values.clone()
-    #     for i in range(1, discounted.shape[0] + 1):
-    #         discounted[-i] += prev * discount_factor
-    #         prev = discounted[-i]
-    #     return discounted
-
-    def discount_old(self, rewards, discount_factor=0.99):
+    @staticmethod
+    def discount(values, discount_factor):
         prev = 0
-        discounted_rewards = np.copy(rewards).astype(np.float32)
-        for i in range(1, len(discounted_rewards) + 1):
-            discounted_rewards[-i] += prev * discount_factor
-            prev = discounted_rewards[-i]
-        return torch.as_tensor(np.array(discounted_rewards), device=self.device)
+        discounted = values.clone()
+        for i in range(1, discounted.shape[0] + 1):
+            discounted[-i] += prev * discount_factor
+            prev = discounted[-i]
+        return discounted
