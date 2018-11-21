@@ -2,11 +2,11 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 rewards = []
-with open('rewards.txt', 'r') as f:
+with open('../rewards.txt', 'r') as f:
     for line in f:
         rewards.append(int(line))
 
-smooth_n = 200
+smooth_n = 500
 
 smoothed_rewards = []
 for i in range(len(rewards) - smooth_n):
