@@ -9,20 +9,31 @@ class SCEnvironmentWrapper:
         self.env = sc2_env.SC2Env(**env_kwargs)
         self.agent_interface = agent_interface
         self.done = False
+        self.timestep = None
 
     def step(self, action):
-        if not self.done:
-            timestep = self.env.step([self.agent_interface.convert_action(*action)])[0]
-            reward = timestep.reward
-            done = int(timestep.step_type == StepType.LAST)
-            state, action_mask = self.agent_interface.convert_state(timestep)
-            self.done = done
-            return state, action_mask, reward, done
-        return self.agent_interface.dummy_state(), self.agent_interface.dummy_mask(), np.nan, 1
+        if self.done:
+            return self.agent_interface.dummy_state(), self.agent_interface.dummy_mask(), np.nan, int(self.done)
+
+        actions = self.agent_interface.convert_action(action)
+        actions.__next__()
+        action = actions.send(self.timestep)
+
+        total_reward = 0
+        while True:
+            self.timestep = self.env.step([action])[0]
+            total_reward += self.timestep.reward
+            self.done = int(self.timestep.step_type == StepType.LAST)
+            state, action_mask = self.agent_interface.convert_state(self.timestep)
+
+            action = actions.send(self.timestep)
+            if self.done or action is None:
+                return state, action_mask, total_reward, int(self.done)
 
     def reset(self):
         timestep = self.env.reset()[0]
         state, action_mask = self.agent_interface.convert_state(timestep)
+        self.timestep = timestep
         self.done = False
         return state, action_mask,  0, int(self.done)
 

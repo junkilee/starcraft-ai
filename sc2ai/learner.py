@@ -13,9 +13,10 @@ class Learner:
 
         self.agent_interface = agent_interface
         self.actor = ConvActorCritic(num_actions=self.agent_interface.num_actions,
-                                     screen_shape=self.agent_interface.screen_shape,
-                                     state_shape=self.agent_interface.state_shape, dtype=self.dtype).to(self.device)
-        self.load()
+                                     screen_dimensions=self.agent_interface.screen_dimensions,
+                                     state_shape=self.agent_interface.state_shape,
+                                     dtype=self.dtype, device=self.device).to(self.device)
+        # self.load()
         self.env = environment
         self.optimizer = torch.optim.Adam(self.actor.parameters(), lr=0.0015)
         self.episode_counter = 0
@@ -26,12 +27,12 @@ class Learner:
             # Choose action from state
             state = torch.as_tensor(np.stack(states), device=self.device).type(self.dtype)
             action_masks = torch.as_tensor(np.stack(action_masks), device=self.device).type(self.dtype)
-            action_indices, x, y, entropys, log_action_probs, critic_values = self.actor(state, action_masks)
+            action_indices, coords, entropys, log_action_probs, critic_values = self.actor(state, action_masks)
             dones = next_dones
 
             # Step to get reward and next state
             states, action_masks, rewards, next_dones = \
-                self.env.step(zip(action_indices.cpu().numpy(), x.cpu().numpy(), y.cpu().numpy()))
+                self.env.step(zip(action_indices.cpu().numpy(), coords.cpu().numpy()))
             yield critic_values, rewards, entropys, log_action_probs, dones
             if all(dones):
                 break
@@ -67,7 +68,7 @@ class Learner:
             advantage = advantage * torch.as_tensor(normalizing_factor, device=self.device).type(self.dtype)
         actor_loss = -log_action_probs.type(self.dtype)[:seq_length] * advantage.data
         critic_loss = advantage.pow(2)
-        return actor_loss.mean() + 0.5 * critic_loss.mean() - 0.01 * entropys.mean()
+        return actor_loss.mean() + 0.5 * critic_loss.mean() - 0.01 * entropys[:seq_length].mean()
 
     @staticmethod
     def discount(values, discount_factor):

@@ -4,10 +4,11 @@ from torch.distributions import Categorical
 
 
 class ConvActorCritic(torch.nn.Module):
-    def __init__(self, num_actions, screen_shape, state_shape, dtype=torch.FloatTensor):
+    def __init__(self, num_actions, screen_dimensions, state_shape, dtype=torch.FloatTensor, device=torch.device('cpu')):
         super().__init__()
         self.num_actions = num_actions
         self.state_shape = state_shape
+        self.screen_dimensions = screen_dimensions
         self.dtype = dtype
         num_input_channels = state_shape[0]
 
@@ -16,8 +17,9 @@ class ConvActorCritic(torch.nn.Module):
         self.conv3 = torch.nn.Conv2d(32, 16, 3)
         self.linear1 = torch.nn.Linear(576, 32)
         self.head_non_spacial = torch.nn.Linear(32, self.num_actions)
-        self.head_spacial_x = torch.nn.Linear(32, screen_shape[0])
-        self.head_spacial_y = torch.nn.Linear(32, screen_shape[1])
+        self.head_spacials = []
+        for dimension in screen_dimensions:
+            self.head_spacials.append(torch.nn.Linear(32, dimension).to(device))
         self.head_critic = torch.nn.Linear(32, 1)
 
     @staticmethod
@@ -37,19 +39,21 @@ class ConvActorCritic(torch.nn.Module):
         logits = F.relu(self.linear1(logits))
 
         non_spacial_probs = F.softmax(self.head_non_spacial(logits), dim=-1)
-        spacial_x_probs = F.softmax(self.head_spacial_x(logits), dim=-1)
-        spacial_y_probs = F.softmax(self.head_spacial_y(logits), dim=-1)
+        spacial_probs = []
+        for head_spacial in self.head_spacials:
+            spacial_probs.append(F.softmax(head_spacial(logits), dim=-1))
         critic_value = self.head_critic(logits)
 
         masked_probs = (non_spacial_probs + 0.00001) * action_mask
         masked_probs = masked_probs / torch.sum(masked_probs, dim=-1, keepdim=True)
 
         non_spacial_index, non_spacial_log_prob, non_spacial_entropy = self.sample(masked_probs)
-        x, x_log_prob, x_entropy = self.sample(spacial_x_probs)
-        y, y_log_prob, y_entropy = self.sample(spacial_y_probs)
 
-        joint_entropy = non_spacial_entropy + x_entropy + y_entropy
-        joint_log_prob = (x_log_prob + y_log_prob) * (non_spacial_index == 0).type(self.dtype) \
-                            + non_spacial_log_prob
+        data = zip(*[self.sample(probs) for probs in spacial_probs])
+        spacial_coords, spacial_log_probs, spacial_entropys = [torch.stack(tensors, dim=-1) for tensors in data]
 
-        return non_spacial_index, x, y, joint_entropy, joint_log_prob, torch.squeeze(critic_value, dim=-1)
+        joint_entropy = non_spacial_entropy + spacial_entropys.sum(dim=-1)
+        joint_log_prob = non_spacial_log_prob
+        for i in range(int(len(self.screen_dimensions) / 2)):
+            joint_log_prob += spacial_log_probs[:, i*2: i*2+2].sum() * (non_spacial_index == i).type(self.dtype)
+        return non_spacial_index, spacial_coords, joint_entropy, joint_log_prob, torch.squeeze(critic_value, dim=-1)

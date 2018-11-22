@@ -39,7 +39,6 @@ flags.mark_flag_as_required("map")
 
 
 def main(unused_argv):
-    interface = RoachesEnvironmentInterface()
     env_kwargs = {
         'map_name': FLAGS.map,
         'players': [sc2_env.Agent(sc2_env.Race[FLAGS.agent_race])],
@@ -55,6 +54,8 @@ def main(unused_argv):
         'disable_fog': FLAGS.disable_fog,
         'visualize': FLAGS.render
     }
+
+    interface = RoachesEnvironmentInterface()
     environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
                                       num_instance=FLAGS.parallel)
     learner = Learner(environment, interface, use_cuda=FLAGS.use_cuda)
