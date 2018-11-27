@@ -13,7 +13,8 @@ class SCEnvironmentWrapper:
 
     def step(self, action):
         if self.done:
-            return self.agent_interface.dummy_state(), self.agent_interface.dummy_mask(), np.nan, int(self.done)
+            dummy_state, dummy_mask = self.agent_interface.dummy_state()
+            return dummy_state, dummy_mask, np.nan, int(self.done)
 
         actions = self.agent_interface.convert_action(action)
         actions.__next__()

@@ -55,5 +55,5 @@ class ConvActorCritic(torch.nn.Module):
         joint_entropy = non_spacial_entropy + spacial_entropys.sum(dim=-1)
         joint_log_prob = non_spacial_log_prob
         for i in range(int(len(self.screen_dimensions) / 2)):
-            joint_log_prob += spacial_log_probs[:, i*2: i*2+2].sum() * (non_spacial_index == i).type(self.dtype)
+            joint_log_prob += spacial_log_probs[:, i*2:i*2+2].sum(dim=-1) * (non_spacial_index == i).type(self.dtype)
         return non_spacial_index, spacial_coords, joint_entropy, joint_log_prob, torch.squeeze(critic_value, dim=-1)

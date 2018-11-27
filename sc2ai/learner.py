@@ -4,9 +4,13 @@ from sc2ai.actor_critic import ConvActorCritic
 
 
 class Learner:
-    def __init__(self, environment, agent_interface, use_cuda=True):
-        self.reward_discount = 0.96
-        self.td_lambda = .96
+    def __init__(self, environment, agent_interface,
+                 load_model=False,
+                 use_cuda=True,
+                 gamma=0.96,
+                 td_lambda=0.96):
+        self.reward_discount = gamma
+        self.td_lambda = td_lambda
 
         self.device = torch.device('cuda' if use_cuda else 'cpu')
         self.dtype = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
@@ -16,7 +20,11 @@ class Learner:
                                      screen_dimensions=self.agent_interface.screen_dimensions,
                                      state_shape=self.agent_interface.state_shape,
                                      dtype=self.dtype, device=self.device).to(self.device)
-        # self.load()
+        if load_model:
+            self.load()
+        else:
+            open('rewards.txt', 'w').close()
+
         self.env = environment
         self.optimizer = torch.optim.Adam(self.actor.parameters(), lr=0.0015)
         self.episode_counter = 0
@@ -54,7 +62,7 @@ class Learner:
         for reward in rewards:
             self.log_data(np.nansum(reward[:-1]))
 
-    def actor_critic_loss(self, rewards, values, log_action_probs, entropys, dones, infinite_horizon=False):
+    def actor_critic_loss(self, rewards, values, log_action_probs, entropys, dones, infinite_horizon=True):
         seq_length = dones.shape[0] - np.sum(dones)
 
         rewards = torch.as_tensor(rewards[:seq_length].astype(np.float32), device=self.device).type(self.dtype)
@@ -64,11 +72,11 @@ class Learner:
             td_errors[seq_length - 1] = rewards[seq_length - 1] - values[seq_length - 1]
         advantage = self.discount(td_errors, discount_factor=self.td_lambda * self.reward_discount)
         if infinite_horizon:
-            normalizing_factor = 1 if self.td_lambda is 1 else 1 / (1 - self.td_lambda ** np.arange(seq_length, 0, -1))
+            normalizing_factor = 1 if self.td_lambda == 1 else 1 / (1 - self.td_lambda ** np.arange(seq_length, 0, -1))
             advantage = advantage * torch.as_tensor(normalizing_factor, device=self.device).type(self.dtype)
         actor_loss = -log_action_probs.type(self.dtype)[:seq_length] * advantage.data
         critic_loss = advantage.pow(2)
-        return actor_loss.mean() + 0.5 * critic_loss.mean() - 0.01 * entropys[:seq_length].mean()
+        return actor_loss.mean() + 0.5 * critic_loss.mean() - 0.001 * entropys[:seq_length].mean()
 
     @staticmethod
     def discount(values, discount_factor):
