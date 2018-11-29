@@ -117,3 +117,6 @@ sc2ai/rewards.txt
 images/
 weights/
 download-rewards.sh
+.DS_Store
+download-img.sh
+outimages/

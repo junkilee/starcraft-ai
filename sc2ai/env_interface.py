@@ -2,6 +2,7 @@ import numpy as np
 from pysc2.lib import actions as pysc2_actions
 from pysc2.lib.features import PlayerRelative, FeatureUnit
 from abc import ABC, abstractmethod
+from scipy.misc import imsave
 
 
 class EnvironmentInterface(ABC):
@@ -40,9 +41,9 @@ class EnvironmentInterface(ABC):
 
 
 class RoachesEnvironmentInterface(EnvironmentInterface):
-    state_shape = [2, 84, 84]
-    screen_dimensions = [84, 64]
-    num_actions = 2
+    state_shape = [3, 84, 84]
+    screen_dimensions = [84, 84, 84, 84]
+    num_actions = 3
 
     @classmethod
     def _get_action_mask(cls, timestep):
@@ -69,16 +70,26 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
             return None
 
     @classmethod
+    def _save_timestep_image(cls, timestep, name='outimages/test'):
+        imsave(name + '1.png', cls.convert_state(timestep)[0][0])
+        imsave(name + '2.png', cls.convert_state(timestep)[0][1])
+        imsave(name + '3.png', cls.convert_state(timestep)[0][2])
+
+    @classmethod
     def _rotate_action(cls, x, y):
         yield
         timestep = yield pysc2_actions.FUNCTIONS.select_point('select', (x, y))
-        if pysc2_actions.FUNCTIONS.Move_screen.id in timestep.observation.available_actions:
-            center_allies = cls._get_center_of_mass(timestep, PlayerRelative.SELF)
-            center_enemies = cls._get_center_of_mass(timestep, PlayerRelative.ENEMY)
-            if center_enemies is not None and center_allies is not None:
-                direction = center_allies - center_enemies
-                target = [x, y] + 10 * direction
-                yield pysc2_actions.FUNCTIONS.Move_screen('now', target)
+        if len(timestep.observation.multi_select) == 0:
+            if pysc2_actions.FUNCTIONS.Move_screen.id in timestep.observation.available_actions:
+                center_allies = cls._get_center_of_mass(timestep, PlayerRelative.SELF)
+                center_enemies = cls._get_center_of_mass(timestep, PlayerRelative.ENEMY)
+                if center_enemies is not None and center_allies is not None:
+                    direction = center_allies - center_enemies
+                    target = [x, y] + 10 * direction
+                    target = np.clip(target, a_min=0, a_max=83)
+                    yield pysc2_actions.FUNCTIONS.Move_screen('now', target)
+        for i in range(2):  # Give unit some time to walk backwards
+            yield
         yield
 
     @classmethod
@@ -93,10 +104,11 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
 
     @classmethod
     def convert_state(cls, timestep):
-        player_relative = timestep.observation.feature_screen.player_relative
-        beacon = (np.array(player_relative) == 3).astype(np.float32)
-        player = (np.array(player_relative) == 1).astype(np.float32)
-        return np.stack([beacon, player], axis=0), cls._get_action_mask(timestep)
+        feature_screen = timestep.observation.feature_screen
+        beacon = (np.array(feature_screen.player_relative) == PlayerRelative.ENEMY).astype(np.float32)
+        player = (np.array(feature_screen.player_relative) == PlayerRelative.SELF).astype(np.float32)
+        health = np.array(feature_screen.unit_hit_points).astype(np.float32)
+        return np.stack([beacon, player, health], axis=0), cls._get_action_mask(timestep)
 
 
 class BeaconEnvironmentInterface(EnvironmentInterface):

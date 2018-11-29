@@ -59,8 +59,8 @@ def main(unused_argv):
         'visualize': FLAGS.render
     }
 
-    # interface = RoachesEnvironmentInterface()
-    interface = BeaconEnvironmentInterface()
+    interface = RoachesEnvironmentInterface()
+    # interface = BeaconEnvironmentInterface()
     environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
                                       num_instance=FLAGS.parallel)
     learner = Learner(environment, interface, use_cuda=FLAGS.use_cuda, load_model=FLAGS.load_model,
