@@ -114,7 +114,6 @@ venv.bak/
 sc2ai/weights/*
 rewards.txt
 sc2ai/rewards.txt
-images/
 weights/
 download-rewards.sh
 .DS_Store
