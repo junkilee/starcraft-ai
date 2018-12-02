@@ -59,10 +59,16 @@ def main(unused_argv):
         'visualize': FLAGS.render
     }
 
-    interface = RoachesEnvironmentInterface()
-    # interface = BeaconEnvironmentInterface()
+    if FLAGS.map == 'DefeatRoaches':
+        interface = RoachesEnvironmentInterface()
+    elif FLAGS.map == 'MoveToBeacon':
+        interface = BeaconEnvironmentInterface()
+    else:
+        raise Exception('Unsupported Map')
+
+    num_instances = 1 if FLAGS.render else FLAGS.parallel
     environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
-                                      num_instance=FLAGS.parallel)
+                                      num_instance=num_instances)
     learner = Learner(environment, interface, use_cuda=FLAGS.use_cuda, load_model=FLAGS.load_model,
                       gamma=FLAGS.gamma, td_lambda=FLAGS.td_lambda)
 

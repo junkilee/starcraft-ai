@@ -88,7 +88,7 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
                     target = [x, y] + 10 * direction
                     target = np.clip(target, a_min=0, a_max=83)
                     yield pysc2_actions.FUNCTIONS.Move_screen('now', target)
-        for i in range(2):  # Give unit some time to walk backwards
+        for i in range(1):  # Give unit some time to walk backwards
             yield
         yield
 

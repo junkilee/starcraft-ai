@@ -17,7 +17,7 @@ class ConvActorCritic(torch.nn.Module):
         self.conv3 = torch.nn.Conv2d(32, 16, 3)
         self.linear1 = torch.nn.Linear(576, 32)
         self.head_non_spacial = torch.nn.Linear(32, self.num_actions)
-        self.head_spacials = []
+        self.head_spacials = torch.nn.ModuleList()
         for dimension in screen_dimensions:
             self.head_spacials.append(torch.nn.Linear(32, dimension).to(device))
         self.head_critic = torch.nn.Linear(32, 1)

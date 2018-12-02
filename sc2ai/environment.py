@@ -2,11 +2,13 @@ from pysc2.env import sc2_env
 from multiprocessing import Pipe, Process
 from pysc2.env.environment import StepType
 import numpy as np
+import time
 
 
 class SCEnvironmentWrapper:
     def __init__(self, agent_interface, env_kwargs):
         self.env = sc2_env.SC2Env(**env_kwargs)
+        self.render = env_kwargs['visualize']
         self.agent_interface = agent_interface
         self.done = False
         self.timestep = None
@@ -23,6 +25,9 @@ class SCEnvironmentWrapper:
         total_reward = 0
         while True:
             self.timestep = self.env.step([action])[0]
+            if self.render:
+                time.sleep(0.3)
+
             total_reward += self.timestep.reward
             self.done = int(self.timestep.step_type == StepType.LAST)
             state, action_mask = self.agent_interface.convert_state(self.timestep)

@@ -62,7 +62,7 @@ class Learner:
         for reward in rewards:
             self.log_data(np.nansum(reward[:-1]))
 
-    def actor_critic_loss(self, rewards, values, log_action_probs, entropys, dones, infinite_horizon=True):
+    def actor_critic_loss(self, rewards, values, log_action_probs, entropys, dones, infinite_horizon=False):
         seq_length = dones.shape[0] - np.sum(dones)
 
         rewards = torch.as_tensor(rewards[:seq_length].astype(np.float32), device=self.device).type(self.dtype)
@@ -92,13 +92,12 @@ class Learner:
         torch.save(self.actor.state_dict(), './weights/actor')
 
     def load(self):
-        print('Loading weights')
         self.actor.load_state_dict(torch.load('./weights/actor'))
 
     def log_data(self, reward):
         with open('rewards.txt', 'a+') as f:
             f.write('%d\n' % reward)
 
-        if self.episode_counter % 200 == 0:
+        if self.episode_counter % 50 == 0:
             self.save()
         self.episode_counter += 1

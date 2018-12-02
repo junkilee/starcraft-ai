@@ -6,7 +6,8 @@ with open('../rewards.txt', 'r') as f:
     for line in f:
         rewards.append(int(line))
 
-smooth_n = 500
+rewards = np.array(rewards)
+smooth_n = 1000
 
 smoothed_rewards = []
 for i in range(len(rewards) - smooth_n):
