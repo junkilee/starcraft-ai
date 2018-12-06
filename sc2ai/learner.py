@@ -26,7 +26,7 @@ class Learner:
             open('rewards.txt', 'w').close()
 
         self.env = environment
-        self.optimizer = torch.optim.Adam(self.actor.parameters(), lr=0.0015)
+        self.optimizer = torch.optim.Adam(self.actor.parameters(), lr=0.0003)
         self.episode_counter = 0
 
     def generate_trajectory(self):

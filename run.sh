@@ -2,7 +2,8 @@
 python -m sc2ai.run_agent \
 --map DefeatRoaches \
 --norender \
---step_mul 16 \
---parallel 5 \
+--load_model \
+--step_mul 8 \
+--parallel 4 \
 --gamma 0.95 \
 --td_lambda 0.95 \
