@@ -120,4 +120,5 @@ download-rewards.sh
 download-img.sh
 outimages/
 saves/
-old/
+archive/
+qsub-out/

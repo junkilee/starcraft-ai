@@ -14,4 +14,4 @@
 export SC2PATH=/research/xai/starcraft/users/ble2/StarCraftII
 source /research/xai/starcraft/users/ble2/miniconda3/bin/activate sc2
 
-$@
+./bin/run

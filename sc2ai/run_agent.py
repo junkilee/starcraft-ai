@@ -1,6 +1,7 @@
 from absl import app
 from absl import flags
 import os
+import pathlib
 
 from pysc2.env import sc2_env
 from pysc2.lib import point_flag
@@ -86,6 +87,7 @@ def main(unused_argv):
         raise Exception('Unsupported Map')
 
     save_dir = os.path.join('saves', FLAGS.save_name)
+    pathlib.Path(save_dir).mkdir(parents=True, exist_ok=True)
     run_info_path = os.path.join(save_dir, 'info.txt')
     with open(run_info_path, 'a') as f:
         for key in FLAGS.__flags:
