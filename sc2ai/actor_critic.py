@@ -46,10 +46,10 @@ class ConvActorCritic(torch.nn.Module):
         critic_value = self.head_critic(logits)
 
         # Calculate amount to add to each action such that there is epsilon probability of performing a random action
-        epsilon = np.min([1, epsilon + 0.00001])
+        epsilon = np.clip(epsilon, a_min=0.000001, a_max=0.9999999)
         extra_prob = ((epsilon / (1 - epsilon)) * torch.sum(non_spacial_probs.data * action_mask, dim=-1, keepdim=True)).type(self.dtype)
         extra_prob /= torch.sum(action_mask, dim=-1, keepdim=True)
-        masked_probs = (non_spacial_probs + extra_prob) * action_mask
+        masked_probs = (non_spacial_probs + extra_prob + 0.00001) * action_mask
 
         # Normalize probability distribution
         masked_probs = masked_probs / torch.sum(masked_probs, dim=-1, keepdim=True)
