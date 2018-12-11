@@ -61,6 +61,8 @@ def main(unused_argv):
     name = 'StalkersVsRoaches'
     globals()[name] = type(name, (StalkersVsRoachesMap,), dict(filename=name))
 
+    save_dir = os.path.join('saves', FLAGS.save_name)
+
     env_kwargs = {
         'map_name': FLAGS.map,
         'players': [sc2_env.Agent(sc2_env.Race[FLAGS.agent_race])],
@@ -74,7 +76,9 @@ def main(unused_argv):
         'step_mul': FLAGS.step_mul,
         'game_steps_per_episode': FLAGS.game_steps_per_episode,
         'disable_fog': FLAGS.disable_fog,
-        'visualize': FLAGS.render
+        'visualize': FLAGS.render,
+        'save_replay_episodes': 200,
+        'replay_dir': os.path.join(save_dir, 'replays')
     }
 
     if FLAGS.map in {'DefeatRoaches', 'StalkersVsRoaches'}:
@@ -86,7 +90,6 @@ def main(unused_argv):
     else:
         raise Exception('Unsupported Map')
 
-    save_dir = os.path.join('saves', FLAGS.save_name)
     pathlib.Path(save_dir).mkdir(parents=True, exist_ok=True)
     run_info_path = os.path.join(save_dir, 'info.txt')
     with open(run_info_path, 'a') as f:
