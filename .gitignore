@@ -111,7 +111,7 @@ venv.bak/
 .mypy_cache/
 .idea/
 
-sc2ai/weights/*
+sc2ai/weights/actor
 rewards.txt
 sc2ai/rewards.txt
 weights/
@@ -119,3 +119,5 @@ download-rewards.sh
 .DS_Store
 download-img.sh
 outimages/
+saves/
+old/

@@ -1,5 +1,6 @@
 from absl import app
 from absl import flags
+import os
 
 from pysc2.env import sc2_env
 from pysc2.lib import point_flag
@@ -34,7 +35,9 @@ flags.DEFINE_enum("agent_race", "random", sc2_env.Race._member_names_,  # pylint
                   "Agent 1's race.")
 flags.DEFINE_bool("cuda", True, "Whether to train on gpu")
 flags.DEFINE_integer("parallel", 1, "How many instances to run in parallel.")
+
 flags.DEFINE_string("map", None, "Name of a map to use.")
+flags.DEFINE_string("save_name", "recent", "Save run information under ./saves/<save_name>")
 
 flags.DEFINE_bool("load_model", False, "Whether to load the previous run's model")
 
@@ -82,6 +85,13 @@ def main(unused_argv):
     else:
         raise Exception('Unsupported Map')
 
+    save_dir = os.path.join('saves', FLAGS.save_name)
+    run_info_path = os.path.join(save_dir, 'info.txt')
+    with open(run_info_path, 'a') as f:
+        for key in FLAGS.__flags:
+            f.write("%s, %s\n" % (key, FLAGS.__flags[key]._value))
+        f.write('\n\n\n')
+
     i = 0
     # Refresh environment every once in a while to deal with memory leak
     load_model = FLAGS.load_model
@@ -89,8 +99,13 @@ def main(unused_argv):
         num_instances = 1 if FLAGS.render else FLAGS.parallel
         environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
                                           num_instance=num_instances)
-        learner = Learner(environment, interface, use_cuda=FLAGS.cuda, load_model=load_model,
-                          gamma=FLAGS.gamma, td_lambda=FLAGS.td_lambda, use_epsilon=FLAGS.epsilon)
+        learner = Learner(environment, interface,
+                          save_dir=save_dir,
+                          use_cuda=FLAGS.cuda,
+                          load_model=load_model,
+                          gamma=FLAGS.gamma,
+                          td_lambda=FLAGS.td_lambda,
+                          use_epsilon=FLAGS.epsilon)
         try:
             for i in range(1000):
                 if FLAGS.max_episodes and i >= FLAGS.max_episodes:

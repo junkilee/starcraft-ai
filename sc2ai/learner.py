@@ -1,15 +1,24 @@
 import numpy as np
 import torch
+import pathlib
+import os
 from sc2ai.actor_critic import ConvActorCritic
 
 
 class Learner:
     def __init__(self, environment, agent_interface,
+                 save_dir="./",
                  load_model=False,
-                 use_cuda=True,
+                 use_cuda=False,
                  use_epsilon=False,
                  gamma=0.96,
                  td_lambda=0.96):
+
+        pathlib.Path(save_dir).mkdir(parents=True, exist_ok=True)
+        self.save_dir = save_dir
+        self.weights_path = os.path.join(save_dir, 'actor-weights.pth')
+        self.rewards_path = os.path.join(save_dir, 'rewards.txt')
+
         self.reward_discount = gamma
         self.td_lambda = td_lambda
         self.use_epsilon = use_epsilon
@@ -25,9 +34,12 @@ class Learner:
                                      dtype=self.dtype, device=self.device).to(self.device)
         self.episode_counter = 0
         if load_model:
-            self.load()
-        else:
-            open('rewards.txt', 'w').close()
+            try:
+                self.load()
+            except FileNotFoundError:
+                pass
+        else:  # Clear out reward output file
+            open(self.rewards_path, 'w').close()
 
         self.env = environment
         self.optimizer = torch.optim.Adam(self.actor.parameters(), lr=0.0003)
@@ -102,19 +114,19 @@ class Learner:
 
     def save(self):
         print('Saving weights')
-        torch.save(self.actor.state_dict(), './weights/actor')
+        torch.save(self.actor.state_dict(), self.weights_path)
 
     def load(self):
-        with open('rewards.txt', 'r') as f:
+        with open(self.rewards_path, 'r') as f:
             for _ in f:
                 self.episode_counter += 1
         if self.use_cuda:
-            self.actor.load_state_dict(torch.load('./weights/actor'))
+            self.actor.load_state_dict(torch.load(self.weights_path))
         else:
-            self.actor.load_state_dict(torch.load('./weights/actor', map_location='cpu'))
+            self.actor.load_state_dict(torch.load(self.weights_path, map_location='cpu'))
 
     def log_data(self, reward):
-        with open('rewards.txt', 'a+') as f:
+        with open(self.rewards_path, 'a+') as f:
             f.write('%d\n' % reward)
 
         if self.episode_counter % 50 == 0:

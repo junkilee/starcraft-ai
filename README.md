@@ -7,7 +7,7 @@ This repository contain the source code to develop explainable AI systems for pl
 
 To run agent, first navigate to project root directory then run:
 
-`./run`
+`./bin/run`
 
 
 ## Dependencies
