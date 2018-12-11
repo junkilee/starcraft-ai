@@ -23,6 +23,7 @@ flags.DEFINE_enum("action_space", None, sc2_env.ActionSpace._member_names_,  # p
                   "Which action space to use. Needed if you take both feature "
                   "and rgb observations.")
 flags.DEFINE_bool("disable_fog", False, "Whether to disable Fog of War.")
+flags.DEFINE_bool("epsilon", False, "Whether to use epsilon greedy")
 
 flags.DEFINE_integer("max_agent_steps", 0, "Total agent steps.")
 flags.DEFINE_integer("game_steps_per_episode", None, "Game steps per episode.")
@@ -89,7 +90,7 @@ def main(unused_argv):
         environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
                                           num_instance=num_instances)
         learner = Learner(environment, interface, use_cuda=FLAGS.cuda, load_model=load_model,
-                          gamma=FLAGS.gamma, td_lambda=FLAGS.td_lambda)
+                          gamma=FLAGS.gamma, td_lambda=FLAGS.td_lambda, use_epsilon=FLAGS.epsilon)
         try:
             for i in range(1000):
                 if FLAGS.max_episodes and i >= FLAGS.max_episodes:

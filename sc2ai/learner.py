@@ -7,10 +7,12 @@ class Learner:
     def __init__(self, environment, agent_interface,
                  load_model=False,
                  use_cuda=True,
+                 use_epsilon=False,
                  gamma=0.96,
                  td_lambda=0.96):
         self.reward_discount = gamma
         self.td_lambda = td_lambda
+        self.use_epsilon = use_epsilon
 
         self.device = torch.device('cuda' if use_cuda else 'cpu')
         self.dtype = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
@@ -31,6 +33,9 @@ class Learner:
         self.optimizer = torch.optim.Adam(self.actor.parameters(), lr=0.0003)
 
     def get_epsilon(self, start=0.99, x=100000, y=0.15):
+        if not self.use_epsilon:
+            return 0
+
         # After x episodes, epsilon will decay from start to y
         t = x / np.log(y / start)
         return start * np.exp(self.episode_counter / t)
