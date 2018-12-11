@@ -3,18 +3,19 @@
 This repository contain the source code to develop explainable AI systems for playing the game Starcraft.
 
 
-# Roaches
-
+# Training an agent
 To run agent, first navigate to project root directory then run:
 
 `./bin/run`
 
 
-## Dependencies
-Install numpy using Anaconda: https://www.anaconda.com/download/
+## Scheduling jobs on the grid
+To schedule a job on the brown grid, navigate to the project root directory and run:
 
-Install tensorflow using:
+`./bin/schedule [script to run]`
 
+For example:
 
-`pip3 install tensorflow`
+`./bin/schedule ./bin/run`
+
 

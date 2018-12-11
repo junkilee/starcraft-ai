@@ -5,7 +5,7 @@ python -m sc2ai.run_agent \
 --load_model \
 --norender \
 --epsilon \
---cuda \
+--nocuda \
 --step_mul 8 \
 --parallel 5 \
 --gamma 0.95 \

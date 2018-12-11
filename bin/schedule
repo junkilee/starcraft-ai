@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+mkdir -p qsub-out
+cd qsub-out
+qsub -now y ../bin/cpu-run $@
