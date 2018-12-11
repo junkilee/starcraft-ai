@@ -2,10 +2,11 @@
 
 python -m sc2ai.run_agent \
 --map StalkersVsRoaches \
+--save_name stalkers4 \
 --load_model \
 --norender \
 --epsilon \
---nocuda \
+--cuda \
 --step_mul 8 \
 --parallel 5 \
 --gamma 0.95 \
