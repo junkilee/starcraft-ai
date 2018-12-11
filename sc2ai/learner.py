@@ -14,12 +14,14 @@ class Learner:
 
         self.device = torch.device('cuda' if use_cuda else 'cpu')
         self.dtype = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
+        self.use_cuda = use_cuda
 
         self.agent_interface = agent_interface
         self.actor = ConvActorCritic(num_actions=self.agent_interface.num_actions,
                                      screen_dimensions=self.agent_interface.screen_dimensions,
                                      state_shape=self.agent_interface.state_shape,
                                      dtype=self.dtype, device=self.device).to(self.device)
+        self.episode_counter = 0
         if load_model:
             self.load()
         else:
@@ -27,7 +29,11 @@ class Learner:
 
         self.env = environment
         self.optimizer = torch.optim.Adam(self.actor.parameters(), lr=0.0003)
-        self.episode_counter = 0
+
+    def get_epsilon(self, start=0.99, x=100000, y=0.15):
+        # After x episodes, epsilon will decay from start to y
+        t = x / np.log(y / start)
+        return start * np.exp(self.episode_counter / t)
 
     def generate_trajectory(self):
         states, action_masks, rewards, next_dones = self.env.reset()
@@ -35,7 +41,8 @@ class Learner:
             # Choose action from state
             state = torch.as_tensor(np.stack(states), device=self.device).type(self.dtype)
             action_masks = torch.as_tensor(np.stack(action_masks), device=self.device).type(self.dtype)
-            action_indices, coords, entropys, log_action_probs, critic_values = self.actor(state, action_masks)
+            action_indices, coords, entropys, log_action_probs, critic_values = \
+                self.actor(state, action_masks, self.get_epsilon())
             dones = next_dones
 
             # Step to get reward and next state
@@ -61,6 +68,7 @@ class Learner:
 
         for reward in rewards:
             self.log_data(np.nansum(reward[:-1]))
+            self.episode_counter += 1
 
     def actor_critic_loss(self, rewards, values, log_action_probs, entropys, dones, infinite_horizon=False):
         seq_length = dones.shape[0] - np.sum(dones)
@@ -92,7 +100,13 @@ class Learner:
         torch.save(self.actor.state_dict(), './weights/actor')
 
     def load(self):
-        self.actor.load_state_dict(torch.load('./weights/actor'))
+        with open('rewards.txt', 'r') as f:
+            for _ in f:
+                self.episode_counter += 1
+        if self.use_cuda:
+            self.actor.load_state_dict(torch.load('./weights/actor'))
+        else:
+            self.actor.load_state_dict(torch.load('./weights/actor', map_location='cpu'))
 
     def log_data(self, reward):
         with open('rewards.txt', 'a+') as f:
@@ -100,4 +114,3 @@ class Learner:
 
         if self.episode_counter % 50 == 0:
             self.save()
-        self.episode_counter += 1

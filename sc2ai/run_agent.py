@@ -3,8 +3,9 @@ from absl import flags
 
 from pysc2.env import sc2_env
 from pysc2.lib import point_flag
+from pysc2.maps import lib
 
-from sc2ai.env_interface import RoachesEnvironmentInterface, BeaconEnvironmentInterface
+from sc2ai.env_interface import RoachesEnvironmentInterface, BeaconEnvironmentInterface, BanelingsEnvironmentInterface
 from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
 from sc2ai.learner import Learner
 
@@ -30,7 +31,7 @@ flags.DEFINE_integer("step_mul", 8, "Game steps per agent step.")
 
 flags.DEFINE_enum("agent_race", "random", sc2_env.Race._member_names_,  # pylint: disable=protected-access
                   "Agent 1's race.")
-flags.DEFINE_bool("use_cuda", True, "Whether to train on gpu")
+flags.DEFINE_bool("cuda", True, "Whether to train on gpu")
 flags.DEFINE_integer("parallel", 1, "How many instances to run in parallel.")
 flags.DEFINE_string("map", None, "Name of a map to use.")
 
@@ -42,7 +43,19 @@ flags.DEFINE_float("td_lambda", 0.96, "Lambda value for generalized advantage es
 flags.mark_flag_as_required("map")
 
 
+class StalkersVsRoachesMap(lib.Map):
+    directory = "mini_games"
+    download = "https://github.com/deepmind/pysc2#get-the-maps"
+    players = 1
+    score_index = 0
+    game_steps_per_episode = 0
+    step_mul = 8
+
+
 def main(unused_argv):
+    name = 'StalkersVsRoaches'
+    globals()[name] = type(name, (StalkersVsRoachesMap,), dict(filename=name))
+
     env_kwargs = {
         'map_name': FLAGS.map,
         'players': [sc2_env.Agent(sc2_env.Race[FLAGS.agent_race])],
@@ -59,26 +72,36 @@ def main(unused_argv):
         'visualize': FLAGS.render
     }
 
-    if FLAGS.map == 'DefeatRoaches':
+    if FLAGS.map in {'DefeatRoaches', 'StalkersVsRoaches'}:
         interface = RoachesEnvironmentInterface()
     elif FLAGS.map == 'MoveToBeacon':
         interface = BeaconEnvironmentInterface()
+    elif FLAGS.map == 'DefeatZerglingsAndBanelings':
+        interface = BanelingsEnvironmentInterface()
     else:
         raise Exception('Unsupported Map')
 
-    num_instances = 1 if FLAGS.render else FLAGS.parallel
-    environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
-                                      num_instance=num_instances)
-    learner = Learner(environment, interface, use_cuda=FLAGS.use_cuda, load_model=FLAGS.load_model,
-                      gamma=FLAGS.gamma, td_lambda=FLAGS.td_lambda)
+    i = 0
+    # Refresh environment every once in a while to deal with memory leak
+    load_model = FLAGS.load_model
+    while True:
+        num_instances = 1 if FLAGS.render else FLAGS.parallel
+        environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
+                                          num_instance=num_instances)
+        learner = Learner(environment, interface, use_cuda=FLAGS.cuda, load_model=load_model,
+                          gamma=FLAGS.gamma, td_lambda=FLAGS.td_lambda)
+        try:
+            for i in range(1000):
+                if FLAGS.max_episodes and i >= FLAGS.max_episodes:
+                    break
+                learner.train_episode()
+                i += 1
+        finally:
+            environment.close()
 
-    try:
-        i = 0
-        while not FLAGS.max_episodes or i < FLAGS.max_episodes:
-            learner.train_episode()
-            i += 1
-    finally:
-        environment.close()
+        if FLAGS.max_episodes and i >= FLAGS.max_episodes:
+            break
+        load_model = True
 
 
 if __name__ == "__main__":

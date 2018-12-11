@@ -26,7 +26,7 @@ class SCEnvironmentWrapper:
         while True:
             self.timestep = self.env.step([action])[0]
             if self.render:
-                time.sleep(0.3)
+                time.sleep(0.15)
 
             total_reward += self.timestep.reward
             self.done = int(self.timestep.step_type == StepType.LAST)

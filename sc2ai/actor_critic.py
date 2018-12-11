@@ -29,7 +29,7 @@ class ConvActorCritic(torch.nn.Module):
         log_action_prob = categorical.log_prob(chosen_action_index)
         return chosen_action_index, log_action_prob, categorical.entropy()
 
-    def forward(self, state, action_mask):
+    def forward(self, state, action_mask, epsilon=0):
         num_steps = state.shape[0]
 
         logits = F.relu(self.conv1(state))
@@ -44,15 +44,20 @@ class ConvActorCritic(torch.nn.Module):
             spacial_probs.append(F.softmax(head_spacial(logits), dim=-1))
         critic_value = self.head_critic(logits)
 
-        masked_probs = (non_spacial_probs + 0.00001) * action_mask
+        # Calculate amount to add to each action such that there is epsilon probability of performing a random action
+        extra_prob = ((epsilon / (1 - epsilon)) * torch.sum(non_spacial_probs.data * action_mask, dim=-1, keepdim=True)).type(self.dtype)
+        extra_prob /= torch.sum(action_mask, dim=-1, keepdim=True)
+        masked_probs = (non_spacial_probs + extra_prob) * action_mask
+
+        # Normalize probability distribution
         masked_probs = masked_probs / torch.sum(masked_probs, dim=-1, keepdim=True)
 
         non_spacial_index, non_spacial_log_prob, non_spacial_entropy = self.sample(masked_probs)
-
         data = zip(*[self.sample(probs) for probs in spacial_probs])
         spacial_coords, spacial_log_probs, spacial_entropys = [torch.stack(tensors, dim=-1) for tensors in data]
-
         joint_entropy = non_spacial_entropy + spacial_entropys.sum(dim=-1)
+
+        # Calculate log probability for actions. Each pair of spacial actions corresponds to a non-spacial action.
         joint_log_prob = non_spacial_log_prob
         for i in range(int(len(self.screen_dimensions) / 2)):
             joint_log_prob += spacial_log_probs[:, i*2:i*2+2].sum(dim=-1) * (non_spacial_index == i).type(self.dtype)
