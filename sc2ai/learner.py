@@ -56,8 +56,8 @@ class Learner:
         states, action_masks, rewards, next_dones = self.env.reset()
         while True:
             # Choose action from state
-            state = torch.as_tensor(np.stack(states), device=self.device).type(self.dtype)
-            action_masks = torch.as_tensor(np.stack(action_masks), device=self.device).type(self.dtype)
+            state = torch.tensor(np.stack(states), device=self.device).type(self.dtype)
+            action_masks = torch.tensor(np.stack(action_masks), device=self.device).type(self.dtype)
             action_indices, coords, entropys, log_action_probs, critic_values = \
                 self.actor(state, action_masks, self.get_epsilon())
             dones = next_dones
@@ -90,7 +90,7 @@ class Learner:
     def actor_critic_loss(self, rewards, values, log_action_probs, entropys, dones, infinite_horizon=False):
         seq_length = dones.shape[0] - np.sum(dones)
 
-        rewards = torch.as_tensor(rewards[:seq_length].astype(np.float32), device=self.device).type(self.dtype)
+        rewards = torch.tensor(rewards[:seq_length].astype(np.float32), device=self.device).type(self.dtype)
         td_errors = rewards + self.reward_discount * values[1:seq_length + 1] - values[:seq_length]
 
         if not infinite_horizon:
@@ -98,7 +98,7 @@ class Learner:
         advantage = self.discount(td_errors, discount_factor=self.td_lambda * self.reward_discount)
         if infinite_horizon:
             normalizing_factor = 1 if self.td_lambda == 1 else 1 / (1 - self.td_lambda ** np.arange(seq_length, 0, -1))
-            advantage = advantage * torch.as_tensor(normalizing_factor, device=self.device).type(self.dtype)
+            advantage = advantage * torch.tensor(normalizing_factor, device=self.device).type(self.dtype)
         actor_loss = -log_action_probs.type(self.dtype)[:seq_length] * advantage.data
         critic_loss = advantage.pow(2)
         return actor_loss.mean() + 0.5 * critic_loss.mean() - 0.001 * entropys[:seq_length].mean()
