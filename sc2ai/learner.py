@@ -108,8 +108,8 @@ class Learner:
         prev = 0
         discounted = values.clone()
         for i in range(1, discounted.shape[0] + 1):
-            discounted[-i] += prev * discount_factor
-            prev = discounted[-i]
+            discounted[-i] = discounted[-i] + prev * discount_factor
+            prev = (discounted[-i]).clone()
         return discounted
 
     def save(self):

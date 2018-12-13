@@ -48,7 +48,7 @@ class ConvActorCritic(torch.nn.Module):
         # Calculate amount to add to each action such that there is epsilon probability of performing a random action
         epsilon = np.clip(epsilon, a_min=0.000001, a_max=0.9999999)
         extra_prob = ((epsilon / (1 - epsilon)) * torch.sum(non_spacial_probs.data * action_mask, dim=-1, keepdim=True)).type(self.dtype)
-        extra_prob /= torch.sum(action_mask, dim=-1, keepdim=True)
+        extra_prob = extra_prob / torch.sum(action_mask, dim=-1, keepdim=True)
         masked_probs = (non_spacial_probs + extra_prob + 0.00001) * action_mask
 
         # Normalize probability distribution
@@ -62,5 +62,5 @@ class ConvActorCritic(torch.nn.Module):
         # Calculate log probability for actions. Each pair of spacial actions corresponds to a non-spacial action.
         joint_log_prob = non_spacial_log_prob
         for i in range(int(len(self.screen_dimensions) / 2)):
-            joint_log_prob += spacial_log_probs[:, i*2:i*2+2].sum(dim=-1) * (non_spacial_index == i).type(self.dtype)
+            joint_log_prob = joint_log_prob + spacial_log_probs[:, i*2:i*2+2].sum(dim=-1) * (non_spacial_index == i).type(self.dtype)
         return non_spacial_index, spacial_coords, joint_entropy, joint_log_prob, torch.squeeze(critic_value, dim=-1)
