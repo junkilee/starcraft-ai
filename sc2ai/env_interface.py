@@ -2,7 +2,6 @@ import numpy as np
 from pysc2.lib import actions as pysc2_actions
 from pysc2.lib.features import PlayerRelative, FeatureUnit
 from abc import ABC, abstractmethod
-from scipy.misc import imsave
 
 
 class EnvironmentInterface(ABC):
@@ -12,17 +11,31 @@ class EnvironmentInterface(ABC):
 
     @classmethod
     def _make_generator(cls, actions):
+        """
+        Utility method to create a generator out of a list of actions. Useful for the case where an action
+        does not depend on the state at all. Has yields in the correct position to fit the format needed for the
+        learner, but does not do anything with the state information passed to the yield.
+
+        :param actions: List of actions to turn into a generator
+        :return: A generator that yields the actions.
+        """
         yield
         for action in actions:
             yield action
         yield
+
+    def convert_states(self, timesteps):
+        state_input = np.stack([self.convert_state(timestep)[0] for timestep in timesteps], axis=0)
+        mask_input = np.stack([self.convert_state(timestep)[1] for timestep in timesteps], axis=0)
+        return state_input, mask_input
 
     @classmethod
     @abstractmethod
     def convert_action(cls, action):
         """
         Converts an action output from the agent into a pysc2 action.
-        :return: pysc2 action object
+        :param action: A tuple of (action_index, coordinates)
+        :return: A generator of pysc2 action objects
         """
         pass
 
@@ -159,7 +172,7 @@ class BanelingsEnvironmentInterface(RoachesEnvironmentInterface):
 
 class BeaconEnvironmentInterface(EnvironmentInterface):
     state_shape = [2, 84, 84]
-    screen_dimensions = [84, 63]
+    screen_dimensions = [84, 84]
     num_actions = 2
 
     @classmethod
@@ -172,6 +185,7 @@ class BeaconEnvironmentInterface(EnvironmentInterface):
     @classmethod
     def convert_action(cls, action):
         action_index, coords = action
+        coords = coords if coords is not None else (0, 0)
         actions = [
             cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', coords)]),
             cls._make_generator([pysc2_actions.FUNCTIONS.select_army('select')])

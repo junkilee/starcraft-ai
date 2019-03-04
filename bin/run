@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 
 python -m sc2ai.run_agent \
---map StalkersVsRoaches \
---save_name stalkers4 \
---load_model \
+--map MoveToBeacon \
+--save_name tftest \
 --norender \
---epsilon \
---cuda \
---step_mul 8 \
---parallel 5 \
---gamma 0.95 \
---td_lambda 0.95 \
+--step_mul 64 \
+--parallel 1 \
+--gamma 0.75 \
+--td_lambda 0.75 \

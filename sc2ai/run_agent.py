@@ -9,7 +9,8 @@ from pysc2.maps import lib
 
 from sc2ai.env_interface import RoachesEnvironmentInterface, BeaconEnvironmentInterface, BanelingsEnvironmentInterface
 from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
-from sc2ai.learner import Learner
+from sc2ai.tflearner.learner import Learner
+from sc2ai.tflearner.tf_agent import InterfaceAgent
 
 FLAGS = flags.FLAGS
 flags.DEFINE_bool("render", True, "Whether to render with pygame.")
@@ -104,13 +105,13 @@ def main(unused_argv):
         num_instances = 1 if FLAGS.render else FLAGS.parallel
         environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
                                           num_instance=num_instances)
-        learner = Learner(environment, interface,
+        agent = InterfaceAgent(interface)
+        learner = Learner(environment, agent,
                           save_dir=save_dir,
-                          use_cuda=FLAGS.cuda,
                           load_model=load_model,
                           gamma=FLAGS.gamma,
-                          td_lambda=FLAGS.td_lambda,
-                          use_epsilon=FLAGS.epsilon)
+                          td_lambda=FLAGS.td_lambda)
+
         try:
             for i in range(1000):
                 if FLAGS.max_episodes and i >= FLAGS.max_episodes:

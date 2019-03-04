@@ -14,6 +14,14 @@ class SCEnvironmentWrapper:
         self.timestep = None
 
     def step(self, action):
+        """
+        :param action:
+            The action, represented as a generator of pysc2 action objects, to take in the current
+            state of the environment.
+        :return:
+            state: The state resulting after the action has been taken.
+            done: Whether the action resulted in the environment reaching a terminal state.
+        """
         if self.done:
             dummy_state, dummy_mask = self.agent_interface.dummy_state()
             return dummy_state, dummy_mask, np.nan, int(self.done)

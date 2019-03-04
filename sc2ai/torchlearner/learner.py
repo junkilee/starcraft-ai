@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import pathlib
 import os
-from sc2ai.actor_critic import ConvActorCritic
+from sc2ai.torchlearner.actor_critic import ConvActorCritic
 
 
 class Learner:
