@@ -113,7 +113,7 @@ def main(unused_argv):
                           td_lambda=FLAGS.td_lambda)
 
         try:
-            for i in range(1000):
+            for i in range(10000):
                 if FLAGS.max_episodes and i >= FLAGS.max_episodes:
                     break
                 learner.train_episode()

@@ -23,7 +23,7 @@ class Util:
         # print_op = tf.print("tensors:", tf.shape(indices), tf.shape(oh), tf.shape(source),
         #                     output_stream=sys.stdout)
         # with tf.control_dependencies([print_op]):
-        result = tf.reduce_sum(mult, axis=-1)
+        result = tf.reduce_sum(mult, axis=1)
         return result
 
     @staticmethod

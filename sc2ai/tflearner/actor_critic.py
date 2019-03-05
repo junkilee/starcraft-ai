@@ -77,12 +77,11 @@ class ConvActorCritic:
         self.spacial_dimensions = spacial_dimensions
 
         self.state_shape = state_shape
-        self.reward_architecture = (32,)
         self.dropout_prob = dropout_prob
 
-        self.filters = [16, 16, 16, 16]
-        self.kernel_sizes = [7, 5, 3, 3]
-        self.strides = [3, 2, 1, 1]
+        self.filters = [16]
+        self.kernel_sizes = [3]
+        self.strides = [3]
         self.architecture = list(zip(range(len(self.filters)), self.filters, self.kernel_sizes, self.strides))
 
     def shared_layers(self, state):

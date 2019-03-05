@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 
 parser = argparse.ArgumentParser(description='Graph rewards')
 parser.add_argument('name', nargs='?', default='recent', help='Name of directory in ./saves to find rewards')
-parser.add_argument('--smooth', type=int, help='Size of window of rewards to average', default=1000)
+parser.add_argument('--smooth', type=int, help='Size of window of rewards to average', default=100)
 args = parser.parse_args()
 
 save_path = os.path.join('saves/', args.name)

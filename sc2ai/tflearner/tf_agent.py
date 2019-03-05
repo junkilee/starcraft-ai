@@ -70,8 +70,6 @@ class InterfaceAgent(ActorCriticAgent):
             self.state_input, self.interface.screen_dimensions)
 
     def step(self, state, mask):
-        # print("STEPPING")
-        # print(mask)
         probs = self.session.run(
             [self.nonspacial_probs, *self.spacial_probs_x, *self.spacial_probs_y], {
                 self.state_input: state,
@@ -79,16 +77,18 @@ class InterfaceAgent(ActorCriticAgent):
             })
         nonspacial_probs = probs[0]
         spacial_probs = probs[1:]
-        spacial_probs_x = probs[:self.num_screen_dims]
-        spacial_probs_y = probs[self.num_screen_dims:]
+        spacial_probs_x = spacial_probs[:self.num_screen_dims]
+        spacial_probs_y = spacial_probs[self.num_screen_dims:]  # [num_screen_dims, num_games, screen_dim]
         # print(nonspacial_probs)
 
-        chosen_nonspacials = Util.sample_multiple(nonspacial_probs)
+        chosen_nonspacials = Util.sample_multiple(nonspacial_probs)  # [num_games]
         action_indices = []
-        for chosen_nonspacial in chosen_nonspacials:
-            if chosen_nonspacial < len(spacial_probs) / 2:
-                x = Util.sample_multiple(spacial_probs_x[chosen_nonspacial])
-                y = Util.sample_multiple(spacial_probs_y[chosen_nonspacial])
+        for i, chosen_nonspacial in enumerate(chosen_nonspacials):
+            if chosen_nonspacial < self.num_screen_dims:
+                x = np.random.choice(self.interface.screen_dimensions[chosen_nonspacial],
+                                     p=spacial_probs_x[chosen_nonspacial][i])
+                y = np.random.choice(self.interface.screen_dimensions[chosen_nonspacial],
+                                     p=spacial_probs_y[chosen_nonspacial][i])
                 action_indices.append((chosen_nonspacial, (x, y)))
             else:
                 action_indices.append((chosen_nonspacial, None))
@@ -96,7 +96,7 @@ class InterfaceAgent(ActorCriticAgent):
 
     def get_feed_dict(self, states, masks, actions):
         nonspacial, spacial = zip(*actions)
-        spacial = [(0, 0) if spacial is None else spacial for spacial in spacial]
+        spacial = [(13, 27) if spacial is None else spacial for spacial in spacial]
         return {
             self.action_input: np.array(nonspacial),
             self.spacial_input: np.array(spacial),
@@ -129,13 +129,22 @@ class InterfaceAgent(ActorCriticAgent):
         result = nonspacial_log_probs + tf.where(self.action_input < self.num_screen_dims,
                                                  x=spacial_log_probs,
                                                  y=tf.zeros_like(spacial_log_probs))
+        self._comp = self.action_input < self.num_screen_dims
+        self._spacial_log_probs = spacial_log_probs
+        self._nonspacial_log_probs = nonspacial_log_probs
+        self._probs_x = probs_x
+        self._probs_y = probs_y
+        self._final_log_prob = result
         return result
 
-    def _get_chosen_spacial_prob(self, spacial_probs, nonspacial_choice):
+    def _get_chosen_spacial_prob(self, spacial_probs, spacial_choice):
+        # TODO: set axis=1 and remove transpose
         spacial_probs = tf.stack(spacial_probs, axis=-1)  # [T, screen_dim, num_screen_dimensions]
-        spacial_probs = Util.index(spacial_probs, nonspacial_choice
-                                   % tf.convert_to_tensor(self.num_screen_dims))  # [T, screen_dim]
-        return Util.index(spacial_probs, self.action_input)  # [T]
+        # spacial_probs = tf.transpose(spacial_probs, [0, 2, 1])  # [T, num_screen_dimensions, screen_dim]
+        spacial_probs = Util.index(spacial_probs, spacial_choice)  # [T, num_screen_dimensions]
+        self._spacial_indexed_screen_x = spacial_probs
+        self._modulo = self.action_input % tf.convert_to_tensor(self.num_screen_dims)
+        return Util.index(spacial_probs, self.action_input % tf.convert_to_tensor(self.num_screen_dims))  # [T]
 
 
 

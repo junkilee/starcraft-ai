@@ -185,7 +185,7 @@ class BeaconEnvironmentInterface(EnvironmentInterface):
     @classmethod
     def convert_action(cls, action):
         action_index, coords = action
-        coords = coords if coords is not None else (0, 0)
+        coords = coords if coords is not None else (9, 14)
         actions = [
             cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', coords)]),
             cls._make_generator([pysc2_actions.FUNCTIONS.select_army('select')])

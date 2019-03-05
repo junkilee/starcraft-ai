@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
 directory=${1:-recent}
-scp -r brendan@10.38.44.134:~/projects/starcraft-ai/saves/${directory} ./saves/
+scp -r brendan@10.38.55.49:~/projects/starcraft-ai/saves/${directory} ./saves/

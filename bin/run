@@ -2,9 +2,9 @@
 
 python -m sc2ai.run_agent \
 --map MoveToBeacon \
---save_name tftest \
+--save_name tftest2 \
 --norender \
 --step_mul 64 \
---parallel 1 \
---gamma 0.75 \
---td_lambda 0.75 \
+--parallel 3 \
+--gamma 0.9 \
+--td_lambda 0.9 \
