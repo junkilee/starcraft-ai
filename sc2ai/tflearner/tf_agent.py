@@ -23,12 +23,18 @@ class ActorCriticAgent(ABC):
         pass
 
     @abstractmethod
-    def get_feed_dict(self, states, masks, actions):
+    def get_feed_dict(self, states, masks, actions, bootstrap_state):
         """
+        :param bootstrap_state:
+        :param masks:
         :param states: A list of states with length T, the number of steps from a single trajectory.
         :param actions: A list of action indices with length T.
         :return: The feed dict required to evaluate self.train_values and self.train_log_probs
         """
+
+    @abstractmethod
+    def bootstrap_value(self):
+        pass
 
     @abstractmethod
     def train_values(self):
@@ -57,6 +63,8 @@ class InterfaceAgent(ActorCriticAgent):
         self.graph = tf.get_default_graph()
 
         self.state_input = tf.placeholder(tf.float32, [None, *self.interface.state_shape])  # [batch, *state_shape]
+        self.bootstrap_state_input = tf.placeholder(tf.float32, [*self.interface.state_shape])
+
         self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions])  # [batch, num_actions]
         self.action_input = tf.placeholder(tf.int32, [None])   # [T]
         self.spacial_input = tf.placeholder(tf.int32, [None, 2])  # [T, 2]   -  (x, y)
@@ -94,15 +102,19 @@ class InterfaceAgent(ActorCriticAgent):
                 action_indices.append((chosen_nonspacial, None))
         return action_indices
 
-    def get_feed_dict(self, states, masks, actions):
+    def get_feed_dict(self, states, masks, actions, bootstrap_state):
         nonspacial, spacial = zip(*actions)
         spacial = [(13, 27) if spacial is None else spacial for spacial in spacial]
         return {
             self.action_input: np.array(nonspacial),
             self.spacial_input: np.array(spacial),
             self.state_input: np.array(states),
-            self.mask_input: np.array(masks)
+            self.mask_input: np.array(masks),
+            self.bootstrap_state_input: np.array(bootstrap_state)
         }
+
+    def bootstrap_value(self):
+        return tf.squeeze(self.network.critic(tf.expand_dims(self.bootstrap_state_input, axis=0)), axis=0)
 
     def train_values(self):
         return self.network.critic(self.state_input)

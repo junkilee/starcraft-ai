@@ -15,6 +15,10 @@ class Rollout:
         self.bootstrap_state = None
         self.done = False
 
+    def states_with_bootstrap(self):
+        assert self.bootstrap_state is not None
+        return self.states + [self.bootstrap_state]
+
     def total_reward(self):
         return np.sum(self.rewards)
 
@@ -51,7 +55,7 @@ class Learner:
             self.rewards_input = tf.placeholder(tf.float32, [None])
             self.loss = self.ac_loss()
             self.rollouts = [Rollout() for _ in range(self.num_games)]
-            self.train_op = tf.train.AdamOptimizer(0.0005).minimize(self.loss)
+            self.train_op = tf.train.AdamOptimizer(0.0003).minimize(self.loss)
             self.session = self.agent.session
             self.session.run(tf.global_variables_initializer())
             self.saver = tf.train.Saver()
@@ -63,14 +67,15 @@ class Learner:
     def ac_loss(self):
         num_steps = tf.shape(self.rewards_input)[0]
         discounts = tf.ones((num_steps, 1)) * self.discount_factor
-        bootstrap_values = tf.zeros((1,))  # TODO: replace with value for non finished games
         rewards = tf.expand_dims(self.rewards_input, axis=1)
+
         values = tf.expand_dims(self.agent.train_values(), axis=1)
+        bootstrap = tf.expand_dims(self.agent.bootstrap_value(), axis=0)
+        # bootstrap = tf.zeros((1,))
+        glr = trfl.generalized_lambda_returns(rewards, discounts, values, bootstrap, lambda_=self.td_lambda)
+        advantage = tf.squeeze(glr - values)
 
-        glr = trfl.generalized_lambda_returns(rewards, discounts, values, bootstrap_values, lambda_=self.td_lambda)
-        advantage = tf.squeeze(glr)
-
-        loss_actor = tf.reduce_mean(-advantage * self.agent.train_log_probs())
+        loss_actor = tf.reduce_mean(-tf.stop_gradient(advantage) * self.agent.train_log_probs())
         loss_critic = tf.reduce_mean(advantage ** 2)
         self._state = self.agent.state_input
         self._mask = self.agent.mask_input
@@ -116,7 +121,8 @@ class Learner:
             if rollout.done:
                 feed_dict = {
                     self.rewards_input: rollout.rewards,
-                    **self.agent.get_feed_dict(rollout.states, rollout.masks, rollout.actions)
+                    **self.agent.get_feed_dict(rollout.states, rollout.masks,
+                                               rollout.actions, rollout.bootstrap_state)
                 }
 
                 fetches = [self._loss_actor, self._loss_critic, self._advantage,
@@ -131,14 +137,15 @@ class Learner:
                     self.agent.spacial_probs_x[0],
                     self.agent.spacial_probs_y[0],
                     self.agent._spacial_indexed_screen_x,
-                    self.agent._modulo
+                    self.agent._modulo,
+                    self.agent.nonspacial_probs
                 ]
 
                 results = self.session.run([self.loss, self.train_op] + fetches, feed_dict=feed_dict)
                 _loss, _, _loss_actor, _loss_critic, _advantage, _glr, _values, _rewards, _state, \
                 _mask, _action, _spacial, _comp, _spacial_log_probs, _nonspacial_log_probs, _probs_x, _probs_y, \
-                _final_log_prob, _all_spacial_x, _all_spacial_y, \
-                    _spacial_indexed_screen_x, _modulo = results
+                _final_log_prob, _all_spacial_x, _all_spacial_y,  \
+                    _spacial_indexed_screen_x, _modulo, _all_nonspacial = results
 
                 self.log_data(rollout.total_reward())
                 self.rollouts[i] = Rollout()
