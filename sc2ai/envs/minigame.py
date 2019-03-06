@@ -2,9 +2,12 @@ import numpy as np
 from gym import spaces
 from pysc2.lib import actions, features
 
-from sc2env import SC2GameEnv
+from sc2env import SC2Env
 
-class MiniGameEnv(SC2GameEnv):
+class MiniGameEnv(SC2Env):
+    """
+    Providing a wrapper for minigames. Mainly supports preprocessing of both reward and observation.
+    """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -24,10 +27,19 @@ class MiniGameEnv(SC2GameEnv):
     def _process_observation(self, raw_obs):
         raise NotImplementedError
 
-    @property
-    def action_space(self):
-        pass
-    
-    @property
-    def observation_space(self):
+class MultiStepMiniGameEnv(SC2Env):
+    """
+    Instead of taking one action per step, it handles a list of consecutive actions.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
+    def _step(self, actions):
+        total_reward = 0
+        for action in actions:
+            raw_obs, reward, done, info = super().__step(self, action)
+            total_reward += self._process_reward(reward, raw_obs)
+            if done:
+                break
+        obs = self._process_observation(raw_obs)
+        return obs, total_reward, done, info

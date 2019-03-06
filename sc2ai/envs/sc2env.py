@@ -31,6 +31,8 @@ class SC2Env(gym.Env):
     def _init_sc2_env(self):
         self._sc2_env = sc2_env.SC2Env(**self._kwargs)
         self._observation_spec = self._sc2_env.observation_spec()
+        self.action_space = None
+        self.observation_space = None
 
     # for backward and forward compatibility
     def seed(self, seed=None):
@@ -112,3 +114,11 @@ class SC2Env(gym.Env):
         if self._sc2_env is not None:
             self._sc2_env.close()
         super()._close()
+    
+    @property
+    def action_space(self):
+        raise NotImplementedError
+    
+    @property
+    def observation_space(self):
+        raise NotImplementedError
