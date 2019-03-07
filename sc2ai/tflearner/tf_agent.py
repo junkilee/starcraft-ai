@@ -8,32 +8,44 @@ from .util import Util
 
 
 class ActorCriticAgent(ABC):
+    """ Agent that can provide all of the necessary tensors to train with Actor Critic using `ActorCriticLearner`.
+    Training is not batched over games, so the tensors only need to provide outputs for a single trajectory.
+    """
     @abstractmethod
     def step(self, states, masks):
         """
-        :param masks:
-        :param states: A list of pysc2 timestep states from different trajectories.
+        Samples a batch of actions, given a batch of states and action masks.
+
+        :param masks: Tensor of shape [batch_size, num_actions]. Mask contains 1 for available actions and 0 for
+            unavailable actions.
+        :param states: Tensor of shape [batch_size, *state_size]
         :return:
             action_indices:
                 A list of indices that represents the chosen action at the state. This can be of any data type
                 and will be passed back into self.get_feed_dict during training.
             actions:
-                A list of pysc2 action generators, one for each state, that will be sent to the environment.
+                A list of pysc2 action indices, one for each state, that will be sent to the environment.
         """
         pass
 
     @abstractmethod
     def get_feed_dict(self, states, masks, actions, bootstrap_state):
         """
-        :param bootstrap_state:
-        :param masks:
-        :param states: A list of states with length T, the number of steps from a single trajectory.
+        Get the feed dict with values for all placeholders that are dependenceies for the tensors
+        `bootstrap_value`, `train_values`, and `train_log_probs`.
+
+        :param bootstrap_state: A numpy a array of shape [*state_shape] representing the terminal state.
+        :param masks: A numpy array of shape [T, num_actions].
+        :param states: A numpy array of shape [T, *state_shape].
         :param actions: A list of action indices with length T.
-        :return: The feed dict required to evaluate self.train_values and self.train_log_probs
+        :return: The feed dict required to evaluate `train_values` and `train_log_probs`
         """
 
     @abstractmethod
     def bootstrap_value(self):
+        """
+        :return: A scalar tensor representing the bootstrap value.
+        """
         pass
 
     @abstractmethod
@@ -87,7 +99,6 @@ class InterfaceAgent(ActorCriticAgent):
         spacial_probs = probs[1:]
         spacial_probs_x = spacial_probs[:self.num_screen_dims]
         spacial_probs_y = spacial_probs[self.num_screen_dims:]  # [num_screen_dims, num_games, screen_dim]
-        # print(nonspacial_probs)
 
         chosen_nonspacials = Util.sample_multiple(nonspacial_probs)  # [num_games]
         action_indices = []
@@ -126,33 +137,14 @@ class InterfaceAgent(ActorCriticAgent):
         probs_y = self._get_chosen_spacial_prob(self.spacial_probs_y, self.spacial_input[:, 1])
         probs_x = self._get_chosen_spacial_prob(self.spacial_probs_x, self.spacial_input[:, 0])
         spacial_log_probs = tf.log(probs_x + 0.0000001) + tf.log(probs_y + 0.0000001)
-
-        # print_op = tf.print("log_prob debug:",
-        #                     "\nnonspacial log probs", nonspacial_log_probs,
-        #                     "\nspacial_log_probs", spacial_log_probs,
-        #                     "\nspacial_probs_y", self.spacial_probs_y,
-        #                     "\nprobs_y", probs_y,
-        #
-        #                     "\n\nspacial_probs_x", self.spacial_probs_x,
-        #                     "\nprobs_x", probs_x,
-        #                     output_stream=sys.stdout)
-
-        # with tf.control_dependencies([print_op]):
         result = nonspacial_log_probs + tf.where(self.action_input < self.num_screen_dims,
                                                  x=spacial_log_probs,
                                                  y=tf.zeros_like(spacial_log_probs))
-        self._comp = self.action_input < self.num_screen_dims
-        self._spacial_log_probs = spacial_log_probs
-        self._nonspacial_log_probs = nonspacial_log_probs
-        self._probs_x = probs_x
-        self._probs_y = probs_y
-        self._final_log_prob = result
         return result
 
     def _get_chosen_spacial_prob(self, spacial_probs, spacial_choice):
         # TODO: set axis=1 and remove transpose
         spacial_probs = tf.stack(spacial_probs, axis=-1)  # [T, screen_dim, num_screen_dimensions]
-        # spacial_probs = tf.transpose(spacial_probs, [0, 2, 1])  # [T, num_screen_dimensions, screen_dim]
         spacial_probs = Util.index(spacial_probs, spacial_choice)  # [T, num_screen_dimensions]
         self._spacial_indexed_screen_x = spacial_probs
         self._modulo = self.action_input % tf.convert_to_tensor(self.num_screen_dims)

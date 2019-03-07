@@ -105,10 +105,11 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
     @classmethod
     def convert_action(cls, action):
         action_index, coords = action
+        coords = coords if coords is not None else (9, 14)
         actions = [
-            cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', coords[0:2])]),
-            cls._make_generator([pysc2_actions.FUNCTIONS.Move_screen('now', coords[2:4])]),
-            cls._rotate_action(coords[4], coords[5]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', coords)]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.Move_screen('now', coords)]),
+            cls._rotate_action(*coords),
             cls._make_generator([pysc2_actions.FUNCTIONS.select_army('select')])
         ]
         return actions[action_index]
@@ -153,10 +154,11 @@ class BanelingsEnvironmentInterface(RoachesEnvironmentInterface):
     @classmethod
     def convert_action(cls, action):
         action_index, coords = action
+        coords = coords if coords is not None else (9, 14)
         actions = [
-            cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', [coords[0], coords[1]])]),
-            cls._make_generator([pysc2_actions.FUNCTIONS.Move_screen('now', [coords[2], coords[3]])]),
-            cls._sacrifice_action(coords[4], coords[5]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', coords)]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.Move_screen('now', coords)]),
+            cls._sacrifice_action(*coords),
             cls._make_generator([pysc2_actions.FUNCTIONS.select_army('select')])
         ]
         return actions[action_index]

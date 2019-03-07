@@ -14,17 +14,12 @@ class Util:
             the corresponding index in indices
         """
         num_choices = tf.shape(source)[1]
-        oh = tf.one_hot(indices, num_choices)
+        one_hot = tf.one_hot(indices, num_choices)
 
         n = tf.size(tf.shape(source)) - 2
         extra_ones = tf.ones((n,), dtype=tf.int32)
-        oh = tf.reshape(oh, tf.concat([tf.shape(source)[:2], extra_ones], axis=0))
-        mult = oh * source
-        # print_op = tf.print("tensors:", tf.shape(indices), tf.shape(oh), tf.shape(source),
-        #                     output_stream=sys.stdout)
-        # with tf.control_dependencies([print_op]):
-        result = tf.reduce_sum(mult, axis=1)
-        return result
+        broadcast_shape = tf.concat([tf.shape(source)[:2], extra_ones], axis=0)
+        return tf.reduce_sum(tf.reshape(one_hot, broadcast_shape) * source, axis=1)
 
     @staticmethod
     def sample_multiple(probabilities):

@@ -9,7 +9,7 @@ from pysc2.maps import lib
 
 from sc2ai.env_interface import RoachesEnvironmentInterface, BeaconEnvironmentInterface, BanelingsEnvironmentInterface
 from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
-from sc2ai.tflearner.learner import Learner
+from sc2ai.tflearner.learner import ActorCriticLearner
 from sc2ai.tflearner.tf_agent import InterfaceAgent
 
 FLAGS = flags.FLAGS
@@ -106,14 +106,14 @@ def main(unused_argv):
         environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
                                           num_instance=num_instances)
         agent = InterfaceAgent(interface)
-        learner = Learner(environment, agent,
+        learner = ActorCriticLearner(environment, agent,
                           save_dir=save_dir,
                           load_model=load_model,
                           gamma=FLAGS.gamma,
                           td_lambda=FLAGS.td_lambda)
 
         try:
-            for i in range(10000):
+            for i in range(1000):
                 if FLAGS.max_episodes and i >= FLAGS.max_episodes:
                     break
                 learner.train_episode()
