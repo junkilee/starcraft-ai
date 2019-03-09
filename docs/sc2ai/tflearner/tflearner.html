@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.5.3" />
+<title>sc2ai.tflearner.tflearner API documentation</title>
+<meta name="description" content="" />
+<link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{font-weight:bold}#index h4 + ul{margin-bottom:.6em}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.name small{font-weight:normal}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase;cursor:pointer}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title"><code>sc2ai.tflearner.tflearner</code> module</h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">import tensorflow as tf
+import numpy as np
+import trfl
+import sys
+import os
+
+
+class Rollout:
+    &#34;&#34;&#34; Contains data needed for training from a single trajectory of the environment.
+
+    Attributes:
+        states: List of numpy arrays of shape [*state_shape], representing every state at which an action was taken.
+        actions: List of action indices generated by the agent&#39;s step function.
+        rewards: List of scalar rewards, representing the reward recieved after performing the corresponding action at
+            the corresponding state.
+        masks: List of masks generated by the environment.
+        bootstrap_state: A numpy array of shape [*state_shape]. Represents the terminal state in the trajectory and is
+            used to bootstrap the advantage estimation.
+    &#34;&#34;&#34;
+    def __init__(self):
+        self.states = []
+        self.rewards = []
+        self.actions = []
+        self.masks = []
+        self.should_bootstrap = None
+        self.bootstrap_state = None
+        self.done = False
+
+    def total_reward(self):
+        &#34;&#34;&#34;
+        :return: The current sum of rewards recieved in the trajectory.
+        &#34;&#34;&#34;
+        return np.sum(self.rewards)
+
+    def add_step(self, state, action=None, reward=None, mask=None, done=None):
+        &#34;&#34;&#34; Saves a step generated by the agent to the rollout.
+
+        Once `add_step` sees a `done`, it stops adding subsequent steps. However, make sure to call `add_step` at
+        least one more time in order to record the terminal state for bootstrapping. Only leave the keyword parameters
+        as None if feeding in the terminal state.
+
+        :param state: The state which the action was taken in.
+        :param action: The action index of the action taken, generated by the agent.
+        :param reward: The reward recieved from the environment after taken the action.
+        :param mask: The action mask that was used during the step.
+        :param done: Whether the action resulted in the environment reaching a terminal state
+        &#34;&#34;&#34;
+        if not self.done:
+            self.states.append(state)
+            self.actions.append(action)
+            self.rewards.append(reward)
+            self.masks.append(mask)
+            self.done = done
+        elif self.bootstrap_state is None:
+            self.bootstrap_state = state
+
+
+class ActorCriticLearner:
+    &#34;&#34;&#34; Implementation of generalized advantage actor critic for TensorFlow.
+    &#34;&#34;&#34;
+    def __init__(self, environment, agent,
+                 save_dir=&#34;./&#34;,
+                 load_model=False,
+                 gamma=0.96,
+                 td_lambda=0.96):
+        &#34;&#34;&#34;
+        :param environment: An instance of `MultipleEnvironment` to be used to generate trajectories.
+        :param agent: An instance of `ActorCriticAgent` to be used to generate actions.
+        :param save_dir: The directory to store rewards and weights in.
+        :param load_model: True if the model should be loaded from `save_dir`.
+        :param gamma: The discount factor.
+        :param td_lambda: The value of lambda used in generalized advantage estimation. Set to 1 to behave like
+            monte carlo returns.
+        &#34;&#34;&#34;
+        self.env = environment
+        self.num_games = self.env.num_instances
+        self.agent = agent
+        self.discount_factor = gamma
+        self.td_lambda = td_lambda
+
+        self.save_dir = save_dir
+        self.weights_path = os.path.join(save_dir, &#39;model.ckpt&#39;)
+        self.rewards_path = os.path.join(save_dir, &#39;rewards.txt&#39;)
+        self.episode_counter = 0
+
+        self.rollouts = [Rollout() for _ in range(self.num_games)]
+        with self.agent.graph.as_default():
+            self.rewards_input = tf.placeholder(tf.float32, [None])
+            self.loss = self._ac_loss()
+            self.train_op = tf.train.AdamOptimizer(0.0003).minimize(self.loss)
+            self.session = self.agent.session
+            self.session.run(tf.global_variables_initializer())
+            self.saver = tf.train.Saver()
+            if load_model:
+                self.load_model()
+            else:
+                open(self.rewards_path, &#39;w&#39;).close()
+
+    def train_episode(self):
+        &#34;&#34;&#34; Trains the agent for single episode for each environment in the `MultipleEnvironment`.
+
+        Training is synchronized such that all training happens after all agents have finished acting in the
+        environment. Call this method in a loop to train the agent.
+        &#34;&#34;&#34;
+        self.generate_trajectory()
+        for i in range(self.num_games):
+            rollout = self.rollouts[i]
+            if rollout.done:
+                feed_dict = {
+                    self.rewards_input: rollout.rewards,
+                    **self.agent.get_feed_dict(rollout.states, rollout.masks,
+                                               rollout.actions, rollout.bootstrap_state)
+                }
+
+                loss, _ = self.session.run([self.loss, self.train_op], feed_dict=feed_dict)
+                self._log_data(rollout.total_reward())
+                self.rollouts[i] = Rollout()
+
+    def generate_trajectory(self):
+        &#34;&#34;&#34;
+        Repeatedly generates actions from the agent and steps in the environment until all environments have reached a
+        terminal state. Stores the complete result from each trajectory in `rollouts`.
+        &#34;&#34;&#34;
+        states, masks, _, _ = self.env.reset()
+        while True:
+            action_indices = self.agent.step(states, masks)
+            new_states, new_masks, rewards, dones = self.env.step(action_indices)
+
+            for i, rollout in enumerate(self.rollouts):
+                rollout.add_step(states[i], action_indices[i], rewards[i], masks[i], dones[i])
+            states = new_states
+            masks = new_masks
+            if all(dones):
+                # Add in the done state for rollouts which just finished for calculating the bootstrap value.
+                for i, rollout in enumerate(self.rollouts):
+                    rollout.add_step(states[i])
+                return
+
+    def save_model(self):
+        &#34;&#34;&#34;
+        Saves the current model weights in current `save_path`.
+        &#34;&#34;&#34;
+        save_path = self.saver.save(self.session, self.weights_path)
+        print(&#34;Model Saved in %s&#34; % save_path)
+
+    def load_model(self):
+        &#34;&#34;&#34;
+        Loads the model from weights stored in the current `save_path`.
+        &#34;&#34;&#34;
+        self.saver.restore(self.session, self.weights_path)
+        print(&#39;Model Loaded&#39;)
+
+    def _log_data(self, reward):
+        self.episode_counter += 1
+        with open(self.rewards_path, &#39;a+&#39;) as f:
+            f.write(&#39;%d\n&#39; % reward)
+
+        if self.episode_counter % 50 == 0:
+            self.save_model()
+
+    def _ac_loss(self):
+        num_steps = tf.shape(self.rewards_input)[0]
+        discounts = tf.ones((num_steps, 1)) * self.discount_factor
+        rewards = tf.expand_dims(self.rewards_input, axis=1)
+
+        values = tf.expand_dims(self.agent.train_values(), axis=1)
+        bootstrap = tf.expand_dims(self.agent.bootstrap_value(), axis=0)
+        glr = trfl.generalized_lambda_returns(rewards, discounts, values, bootstrap, lambda_=self.td_lambda)
+        advantage = tf.squeeze(glr - values)
+
+        loss_actor = tf.reduce_mean(-tf.stop_gradient(advantage) * self.agent.train_log_probs())
+        loss_critic = tf.reduce_mean(advantage ** 2)
+        result = loss_actor + 0.5 * loss_critic
+        return result</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="sc2ai.tflearner.tflearner.ActorCriticLearner"><code class="flex name class">
+<span>class <span class="ident">ActorCriticLearner</span></span>
+</code></dt>
+<dd>
+<section class="desc"><p>Implementation of generalized advantage actor critic for TensorFlow.</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class ActorCriticLearner:
+    &#34;&#34;&#34; Implementation of generalized advantage actor critic for TensorFlow.
+    &#34;&#34;&#34;
+    def __init__(self, environment, agent,
+                 save_dir=&#34;./&#34;,
+                 load_model=False,
+                 gamma=0.96,
+                 td_lambda=0.96):
+        &#34;&#34;&#34;
+        :param environment: An instance of `MultipleEnvironment` to be used to generate trajectories.
+        :param agent: An instance of `ActorCriticAgent` to be used to generate actions.
+        :param save_dir: The directory to store rewards and weights in.
+        :param load_model: True if the model should be loaded from `save_dir`.
+        :param gamma: The discount factor.
+        :param td_lambda: The value of lambda used in generalized advantage estimation. Set to 1 to behave like
+            monte carlo returns.
+        &#34;&#34;&#34;
+        self.env = environment
+        self.num_games = self.env.num_instances
+        self.agent = agent
+        self.discount_factor = gamma
+        self.td_lambda = td_lambda
+
+        self.save_dir = save_dir
+        self.weights_path = os.path.join(save_dir, &#39;model.ckpt&#39;)
+        self.rewards_path = os.path.join(save_dir, &#39;rewards.txt&#39;)
+        self.episode_counter = 0
+
+        self.rollouts = [Rollout() for _ in range(self.num_games)]
+        with self.agent.graph.as_default():
+            self.rewards_input = tf.placeholder(tf.float32, [None])
+            self.loss = self._ac_loss()
+            self.train_op = tf.train.AdamOptimizer(0.0003).minimize(self.loss)
+            self.session = self.agent.session
+            self.session.run(tf.global_variables_initializer())
+            self.saver = tf.train.Saver()
+            if load_model:
+                self.load_model()
+            else:
+                open(self.rewards_path, &#39;w&#39;).close()
+
+    def train_episode(self):
+        &#34;&#34;&#34; Trains the agent for single episode for each environment in the `MultipleEnvironment`.
+
+        Training is synchronized such that all training happens after all agents have finished acting in the
+        environment. Call this method in a loop to train the agent.
+        &#34;&#34;&#34;
+        self.generate_trajectory()
+        for i in range(self.num_games):
+            rollout = self.rollouts[i]
+            if rollout.done:
+                feed_dict = {
+                    self.rewards_input: rollout.rewards,
+                    **self.agent.get_feed_dict(rollout.states, rollout.masks,
+                                               rollout.actions, rollout.bootstrap_state)
+                }
+
+                loss, _ = self.session.run([self.loss, self.train_op], feed_dict=feed_dict)
+                self._log_data(rollout.total_reward())
+                self.rollouts[i] = Rollout()
+
+    def generate_trajectory(self):
+        &#34;&#34;&#34;
+        Repeatedly generates actions from the agent and steps in the environment until all environments have reached a
+        terminal state. Stores the complete result from each trajectory in `rollouts`.
+        &#34;&#34;&#34;
+        states, masks, _, _ = self.env.reset()
+        while True:
+            action_indices = self.agent.step(states, masks)
+            new_states, new_masks, rewards, dones = self.env.step(action_indices)
+
+            for i, rollout in enumerate(self.rollouts):
+                rollout.add_step(states[i], action_indices[i], rewards[i], masks[i], dones[i])
+            states = new_states
+            masks = new_masks
+            if all(dones):
+                # Add in the done state for rollouts which just finished for calculating the bootstrap value.
+                for i, rollout in enumerate(self.rollouts):
+                    rollout.add_step(states[i])
+                return
+
+    def save_model(self):
+        &#34;&#34;&#34;
+        Saves the current model weights in current `save_path`.
+        &#34;&#34;&#34;
+        save_path = self.saver.save(self.session, self.weights_path)
+        print(&#34;Model Saved in %s&#34; % save_path)
+
+    def load_model(self):
+        &#34;&#34;&#34;
+        Loads the model from weights stored in the current `save_path`.
+        &#34;&#34;&#34;
+        self.saver.restore(self.session, self.weights_path)
+        print(&#39;Model Loaded&#39;)
+
+    def _log_data(self, reward):
+        self.episode_counter += 1
+        with open(self.rewards_path, &#39;a+&#39;) as f:
+            f.write(&#39;%d\n&#39; % reward)
+
+        if self.episode_counter % 50 == 0:
+            self.save_model()
+
+    def _ac_loss(self):
+        num_steps = tf.shape(self.rewards_input)[0]
+        discounts = tf.ones((num_steps, 1)) * self.discount_factor
+        rewards = tf.expand_dims(self.rewards_input, axis=1)
+
+        values = tf.expand_dims(self.agent.train_values(), axis=1)
+        bootstrap = tf.expand_dims(self.agent.bootstrap_value(), axis=0)
+        glr = trfl.generalized_lambda_returns(rewards, discounts, values, bootstrap, lambda_=self.td_lambda)
+        advantage = tf.squeeze(glr - values)
+
+        loss_actor = tf.reduce_mean(-tf.stop_gradient(advantage) * self.agent.train_log_probs())
+        loss_critic = tf.reduce_mean(advantage ** 2)
+        result = loss_actor + 0.5 * loss_critic
+        return result</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="sc2ai.tflearner.tflearner.ActorCriticLearner.__init__"><code class="name flex">
+<span>def <span class="ident">__init__</span></span>(<span>self, environment, agent, save_dir=&#39;./&#39;, load_model=False, gamma=0.96, td_lambda=0.96)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>:param environment: An instance of <code>MultipleEnvironment</code> to be used to generate trajectories.
+:param agent: An instance of <code>ActorCriticAgent</code> to be used to generate actions.
+:param save_dir: The directory to store rewards and weights in.
+:param load_model: True if the model should be loaded from <code>save_dir</code>.
+:param gamma: The discount factor.
+:param td_lambda: The value of lambda used in generalized advantage estimation. Set to 1 to behave like
+monte carlo returns.</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def __init__(self, environment, agent,
+             save_dir=&#34;./&#34;,
+             load_model=False,
+             gamma=0.96,
+             td_lambda=0.96):
+    &#34;&#34;&#34;
+    :param environment: An instance of `MultipleEnvironment` to be used to generate trajectories.
+    :param agent: An instance of `ActorCriticAgent` to be used to generate actions.
+    :param save_dir: The directory to store rewards and weights in.
+    :param load_model: True if the model should be loaded from `save_dir`.
+    :param gamma: The discount factor.
+    :param td_lambda: The value of lambda used in generalized advantage estimation. Set to 1 to behave like
+        monte carlo returns.
+    &#34;&#34;&#34;
+    self.env = environment
+    self.num_games = self.env.num_instances
+    self.agent = agent
+    self.discount_factor = gamma
+    self.td_lambda = td_lambda
+
+    self.save_dir = save_dir
+    self.weights_path = os.path.join(save_dir, &#39;model.ckpt&#39;)
+    self.rewards_path = os.path.join(save_dir, &#39;rewards.txt&#39;)
+    self.episode_counter = 0
+
+    self.rollouts = [Rollout() for _ in range(self.num_games)]
+    with self.agent.graph.as_default():
+        self.rewards_input = tf.placeholder(tf.float32, [None])
+        self.loss = self._ac_loss()
+        self.train_op = tf.train.AdamOptimizer(0.0003).minimize(self.loss)
+        self.session = self.agent.session
+        self.session.run(tf.global_variables_initializer())
+        self.saver = tf.train.Saver()
+        if load_model:
+            self.load_model()
+        else:
+            open(self.rewards_path, &#39;w&#39;).close()</code></pre>
+</details>
+</dd>
+<dt id="sc2ai.tflearner.tflearner.ActorCriticLearner.generate_trajectory"><code class="name flex">
+<span>def <span class="ident">generate_trajectory</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Repeatedly generates actions from the agent and steps in the environment until all environments have reached a
+terminal state. Stores the complete result from each trajectory in <code>rollouts</code>.</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def generate_trajectory(self):
+    &#34;&#34;&#34;
+    Repeatedly generates actions from the agent and steps in the environment until all environments have reached a
+    terminal state. Stores the complete result from each trajectory in `rollouts`.
+    &#34;&#34;&#34;
+    states, masks, _, _ = self.env.reset()
+    while True:
+        action_indices = self.agent.step(states, masks)
+        new_states, new_masks, rewards, dones = self.env.step(action_indices)
+
+        for i, rollout in enumerate(self.rollouts):
+            rollout.add_step(states[i], action_indices[i], rewards[i], masks[i], dones[i])
+        states = new_states
+        masks = new_masks
+        if all(dones):
+            # Add in the done state for rollouts which just finished for calculating the bootstrap value.
+            for i, rollout in enumerate(self.rollouts):
+                rollout.add_step(states[i])
+            return</code></pre>
+</details>
+</dd>
+<dt id="sc2ai.tflearner.tflearner.ActorCriticLearner.load_model"><code class="name flex">
+<span>def <span class="ident">load_model</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Loads the model from weights stored in the current <code>save_path</code>.</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def load_model(self):
+    &#34;&#34;&#34;
+    Loads the model from weights stored in the current `save_path`.
+    &#34;&#34;&#34;
+    self.saver.restore(self.session, self.weights_path)
+    print(&#39;Model Loaded&#39;)</code></pre>
+</details>
+</dd>
+<dt id="sc2ai.tflearner.tflearner.ActorCriticLearner.save_model"><code class="name flex">
+<span>def <span class="ident">save_model</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Saves the current model weights in current <code>save_path</code>.</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def save_model(self):
+    &#34;&#34;&#34;
+    Saves the current model weights in current `save_path`.
+    &#34;&#34;&#34;
+    save_path = self.saver.save(self.session, self.weights_path)
+    print(&#34;Model Saved in %s&#34; % save_path)</code></pre>
+</details>
+</dd>
+<dt id="sc2ai.tflearner.tflearner.ActorCriticLearner.train_episode"><code class="name flex">
+<span>def <span class="ident">train_episode</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Trains the agent for single episode for each environment in the <code>MultipleEnvironment</code>.</p>
+<p>Training is synchronized such that all training happens after all agents have finished acting in the
+environment. Call this method in a loop to train the agent.</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def train_episode(self):
+    &#34;&#34;&#34; Trains the agent for single episode for each environment in the `MultipleEnvironment`.
+
+    Training is synchronized such that all training happens after all agents have finished acting in the
+    environment. Call this method in a loop to train the agent.
+    &#34;&#34;&#34;
+    self.generate_trajectory()
+    for i in range(self.num_games):
+        rollout = self.rollouts[i]
+        if rollout.done:
+            feed_dict = {
+                self.rewards_input: rollout.rewards,
+                **self.agent.get_feed_dict(rollout.states, rollout.masks,
+                                           rollout.actions, rollout.bootstrap_state)
+            }
+
+            loss, _ = self.session.run([self.loss, self.train_op], feed_dict=feed_dict)
+            self._log_data(rollout.total_reward())
+            self.rollouts[i] = Rollout()</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="sc2ai.tflearner.tflearner.Rollout"><code class="flex name class">
+<span>class <span class="ident">Rollout</span></span>
+</code></dt>
+<dd>
+<section class="desc"><p>Contains data needed for training from a single trajectory of the environment.</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>states</code></strong></dt>
+<dd>List of numpy arrays of shape [*state_shape], representing every state at which an action was taken.</dd>
+<dt><strong><code>actions</code></strong></dt>
+<dd>List of action indices generated by the agent's step function.</dd>
+<dt><strong><code>rewards</code></strong></dt>
+<dd>List of scalar rewards, representing the reward recieved after performing the corresponding action at
+the corresponding state.</dd>
+<dt><strong><code>masks</code></strong></dt>
+<dd>List of masks generated by the environment.</dd>
+<dt><strong><code>bootstrap_state</code></strong></dt>
+<dd>A numpy array of shape [*state_shape]. Represents the terminal state in the trajectory and is
+used to bootstrap the advantage estimation.</dd>
+</dl></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class Rollout:
+    &#34;&#34;&#34; Contains data needed for training from a single trajectory of the environment.
+
+    Attributes:
+        states: List of numpy arrays of shape [*state_shape], representing every state at which an action was taken.
+        actions: List of action indices generated by the agent&#39;s step function.
+        rewards: List of scalar rewards, representing the reward recieved after performing the corresponding action at
+            the corresponding state.
+        masks: List of masks generated by the environment.
+        bootstrap_state: A numpy array of shape [*state_shape]. Represents the terminal state in the trajectory and is
+            used to bootstrap the advantage estimation.
+    &#34;&#34;&#34;
+    def __init__(self):
+        self.states = []
+        self.rewards = []
+        self.actions = []
+        self.masks = []
+        self.should_bootstrap = None
+        self.bootstrap_state = None
+        self.done = False
+
+    def total_reward(self):
+        &#34;&#34;&#34;
+        :return: The current sum of rewards recieved in the trajectory.
+        &#34;&#34;&#34;
+        return np.sum(self.rewards)
+
+    def add_step(self, state, action=None, reward=None, mask=None, done=None):
+        &#34;&#34;&#34; Saves a step generated by the agent to the rollout.
+
+        Once `add_step` sees a `done`, it stops adding subsequent steps. However, make sure to call `add_step` at
+        least one more time in order to record the terminal state for bootstrapping. Only leave the keyword parameters
+        as None if feeding in the terminal state.
+
+        :param state: The state which the action was taken in.
+        :param action: The action index of the action taken, generated by the agent.
+        :param reward: The reward recieved from the environment after taken the action.
+        :param mask: The action mask that was used during the step.
+        :param done: Whether the action resulted in the environment reaching a terminal state
+        &#34;&#34;&#34;
+        if not self.done:
+            self.states.append(state)
+            self.actions.append(action)
+            self.rewards.append(reward)
+            self.masks.append(mask)
+            self.done = done
+        elif self.bootstrap_state is None:
+            self.bootstrap_state = state</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="sc2ai.tflearner.tflearner.Rollout.__init__"><code class="name flex">
+<span>def <span class="ident">__init__</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Initialize self.
+See help(type(self)) for accurate signature.</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def __init__(self):
+    self.states = []
+    self.rewards = []
+    self.actions = []
+    self.masks = []
+    self.should_bootstrap = None
+    self.bootstrap_state = None
+    self.done = False</code></pre>
+</details>
+</dd>
+<dt id="sc2ai.tflearner.tflearner.Rollout.add_step"><code class="name flex">
+<span>def <span class="ident">add_step</span></span>(<span>self, state, action=None, reward=None, mask=None, done=None)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Saves a step generated by the agent to the rollout.</p>
+<p>Once <code>add_step</code> sees a <code>done</code>, it stops adding subsequent steps. However, make sure to call <code>add_step</code> at
+least one more time in order to record the terminal state for bootstrapping. Only leave the keyword parameters
+as None if feeding in the terminal state.</p>
+<p>:param state: The state which the action was taken in.
+:param action: The action index of the action taken, generated by the agent.
+:param reward: The reward recieved from the environment after taken the action.
+:param mask: The action mask that was used during the step.
+:param done: Whether the action resulted in the environment reaching a terminal state</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def add_step(self, state, action=None, reward=None, mask=None, done=None):
+    &#34;&#34;&#34; Saves a step generated by the agent to the rollout.
+
+    Once `add_step` sees a `done`, it stops adding subsequent steps. However, make sure to call `add_step` at
+    least one more time in order to record the terminal state for bootstrapping. Only leave the keyword parameters
+    as None if feeding in the terminal state.
+
+    :param state: The state which the action was taken in.
+    :param action: The action index of the action taken, generated by the agent.
+    :param reward: The reward recieved from the environment after taken the action.
+    :param mask: The action mask that was used during the step.
+    :param done: Whether the action resulted in the environment reaching a terminal state
+    &#34;&#34;&#34;
+    if not self.done:
+        self.states.append(state)
+        self.actions.append(action)
+        self.rewards.append(reward)
+        self.masks.append(mask)
+        self.done = done
+    elif self.bootstrap_state is None:
+        self.bootstrap_state = state</code></pre>
+</details>
+</dd>
+<dt id="sc2ai.tflearner.tflearner.Rollout.total_reward"><code class="name flex">
+<span>def <span class="ident">total_reward</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>:return: The current sum of rewards recieved in the trajectory.</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def total_reward(self):
+    &#34;&#34;&#34;
+    :return: The current sum of rewards recieved in the trajectory.
+    &#34;&#34;&#34;
+    return np.sum(self.rewards)</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="sc2ai.tflearner" href="index.html">sc2ai.tflearner</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="sc2ai.tflearner.tflearner.ActorCriticLearner" href="#sc2ai.tflearner.tflearner.ActorCriticLearner">ActorCriticLearner</a></code></h4>
+<ul class="">
+<li><code><a title="sc2ai.tflearner.tflearner.ActorCriticLearner.__init__" href="#sc2ai.tflearner.tflearner.ActorCriticLearner.__init__">__init__</a></code></li>
+<li><code><a title="sc2ai.tflearner.tflearner.ActorCriticLearner.generate_trajectory" href="#sc2ai.tflearner.tflearner.ActorCriticLearner.generate_trajectory">generate_trajectory</a></code></li>
+<li><code><a title="sc2ai.tflearner.tflearner.ActorCriticLearner.load_model" href="#sc2ai.tflearner.tflearner.ActorCriticLearner.load_model">load_model</a></code></li>
+<li><code><a title="sc2ai.tflearner.tflearner.ActorCriticLearner.save_model" href="#sc2ai.tflearner.tflearner.ActorCriticLearner.save_model">save_model</a></code></li>
+<li><code><a title="sc2ai.tflearner.tflearner.ActorCriticLearner.train_episode" href="#sc2ai.tflearner.tflearner.ActorCriticLearner.train_episode">train_episode</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="sc2ai.tflearner.tflearner.Rollout" href="#sc2ai.tflearner.tflearner.Rollout">Rollout</a></code></h4>
+<ul class="">
+<li><code><a title="sc2ai.tflearner.tflearner.Rollout.__init__" href="#sc2ai.tflearner.tflearner.Rollout.__init__">__init__</a></code></li>
+<li><code><a title="sc2ai.tflearner.tflearner.Rollout.add_step" href="#sc2ai.tflearner.tflearner.Rollout.add_step">add_step</a></code></li>
+<li><code><a title="sc2ai.tflearner.tflearner.Rollout.total_reward" href="#sc2ai.tflearner.tflearner.Rollout.total_reward">total_reward</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.5.3</a>.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad()</script>
+</body>
+</html>

@@ -66,6 +66,11 @@ class BasicActorCritic(ActorCritic):
         return tf.squeeze(state, axis=-1)
 
 
+class LSTMActorCritic:
+    def __init__(self):
+        pass
+
+
 # TODO Refactor the rest of the code above to match ConvActorCritic
 class ConvActorCritic:
     """

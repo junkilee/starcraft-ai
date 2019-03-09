@@ -3,8 +3,8 @@ import tensorflow as tf
 import numpy as np
 import sys
 
-from sc2ai.tflearner.actor_critic import ConvActorCritic
-from .util import Util
+from sc2ai.tflearner.ac_network import ConvActorCritic
+from sc2ai.tflearner.util import Util
 
 
 class ActorCriticAgent(ABC):
@@ -79,7 +79,7 @@ class InterfaceAgent(ActorCriticAgent):
 
         self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions])  # [batch, num_actions]
         self.action_input = tf.placeholder(tf.int32, [None])   # [T]
-        self.spacial_input = tf.placeholder(tf.int32, [None, 2])  # [T, 2]   -  (x, y)
+        self.spacial_input = tf.placeholder(tf.int32, [None, 2])  # [T, 2]   dimension size 2 for x and y
         self.network = ConvActorCritic(self.interface.num_actions, self.num_screen_dims, self.interface.state_shape)
 
         # Tensor of shape [T, num_actions]
@@ -143,11 +143,8 @@ class InterfaceAgent(ActorCriticAgent):
         return result
 
     def _get_chosen_spacial_prob(self, spacial_probs, spacial_choice):
-        # TODO: set axis=1 and remove transpose
         spacial_probs = tf.stack(spacial_probs, axis=-1)  # [T, screen_dim, num_screen_dimensions]
         spacial_probs = Util.index(spacial_probs, spacial_choice)  # [T, num_screen_dimensions]
-        self._spacial_indexed_screen_x = spacial_probs
-        self._modulo = self.action_input % tf.convert_to_tensor(self.num_screen_dims)
         return Util.index(spacial_probs, self.action_input % tf.convert_to_tensor(self.num_screen_dims))  # [T]
 
 
