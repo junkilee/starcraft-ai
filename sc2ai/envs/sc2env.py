@@ -10,6 +10,7 @@ from pysc2.lib import actions
 from pysc2.env.environment import StepType
 
 from game_info import ActionIDs
+from game_info import ActionIDs
 
 class SC2Env(gym.Env):
     metadata = {'render.modes': [None, 'human']}
@@ -29,6 +30,7 @@ class SC2Env(gym.Env):
         self._observation_spec = None
 
     def _init_sc2_env(self):
+
         self._sc2_env = sc2_env.SC2Env(**self._kwargs)
         self._observation_spec = self._sc2_env.observation_spec()
         self.action_space = None
