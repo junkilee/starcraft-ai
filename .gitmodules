@@ -1,4 +1,0 @@
-[submodule "baselines"]
-	path = baselines
-	url = git@github.com:junkilee/baselines.git
-	branch = master
