@@ -1,0 +1,3 @@
+pysc2
+numpy
+gym
