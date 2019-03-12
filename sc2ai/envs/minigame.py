@@ -8,8 +8,9 @@ class MiniGameEnv(SC2Env):
     """
     Providing a wrapper for minigames. Mainly supports preprocessing of both reward and observation.
     """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, map_name, **kwargs):
+        assert isinstance(map_name, str)
+        super().__init__(map_name, **kwargs)
 
     def _reset(self):
         obs = super()._reset()
