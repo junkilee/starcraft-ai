@@ -40,7 +40,8 @@ release = ''
 # ones.
 extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.graphviz',
-              'sphinx.ext.inheritance_diagram'
+              'sphinx.ext.inheritance_diagram',
+              'sphinx.ext.napoleon'
         ]
 
 # Add any paths that contain templates here, relative to this directory.

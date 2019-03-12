@@ -1,3 +1,5 @@
+"""A script to train a Ray agent using the :py:mod:`sc2ai` environment.
+"""
 import os
 import sys
 

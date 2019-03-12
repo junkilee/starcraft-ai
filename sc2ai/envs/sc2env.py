@@ -17,6 +17,12 @@ import numpy as np
 from baselines import logger
 
 class SC2Env(gym.Env):
+    """A gym wrapper for PySC2's Starcraft II environment.
+
+    Args:
+        map_name (str):
+        **kwargs:
+    """
     metadata = {'render.modes': [None, 'human']}
     reward_range = (-np.inf, np.inf)
     spec = None
@@ -36,6 +42,12 @@ class SC2Env(gym.Env):
         self._seed = None
 
     def _init_sc2_env(self):
+        """
+        Initializes
+
+        Returns:
+
+        """
         players = (sc2_env.Agent(sc2_env.Race[self._env_options.agent1_race], self._env_options.agent1_name),
                    sc2_env.Bot(sc2_env.Race[self._env_options.agent2_race], self._env_options.difficulty))
 
@@ -61,6 +73,12 @@ class SC2Env(gym.Env):
 
 
     def render(self, mode='human', close=False):
+        """
+
+        :param mode:
+        :param close:
+        :return:
+        """
         if not close: # then we have to check rendering mode
             modes = self.metadata.get('render.modes', [])
             if len(modes) == 0:
@@ -70,6 +88,10 @@ class SC2Env(gym.Env):
         return
 
     def close(self):
+        """
+
+        :return:
+        """
         if not hasattr(self, '_closed') or self._closed:
             return
         if self._owns_render:
@@ -90,12 +112,20 @@ class SC2Env(gym.Env):
         return self._available_actions
 
     def seed(self, seed=None):
+        """
+
+        :param seed:
+        :return:
+        """
         self._seed = seed
     
     def step(self, action):
         """
-        action  expects a tuple which has a specification of an action containing a kind and arguments.
+
+        :param action: Expects a tuple which has a specification of an action containing a kind and arguments.
+        :return:
         """
+
         if action[0] not in self._available_actions:
             logging.warning("The chosen action is not available: %s", action)
             action = [ActionIDs.NO_OP]

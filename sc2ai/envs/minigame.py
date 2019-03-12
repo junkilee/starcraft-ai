@@ -5,8 +5,11 @@ from pysc2.lib import actions, features
 from sc2env import SC2Env
 
 class MiniGameEnv(SC2Env):
-    """
-    Providing a wrapper for minigames. Mainly supports preprocessing of both reward and observation.
+    """Providing a wrapper for minigames. Mainly supports preprocessing of both reward and observation.
+
+    Args:
+        map_name:
+        **kwargs:
     """
     def __init__(self, map_name, **kwargs):
         assert isinstance(map_name, str)
