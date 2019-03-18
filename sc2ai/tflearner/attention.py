@@ -1,83 +1,137 @@
-"""
-Implementation of Scaled Dot Product Attention
-https://arxiv.org/abs/1706.03762
+# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""Implementation of multiheaded attention and self-attention layers."""
 
-The original source code adapted from
-https://github.com/DongjunLee/transformer-tensorflow/blob/master/transformer/attention.py
-"""
-import numpy as np
 import tensorflow as tf
 
-class MultiHeadedAttention:
-    """
-    A Class for Multi Headed Attention Module
 
-    :param num_heads(int): The Number of heads in the attention module.
-    :param d_model(int): The dimension of the model.
-    :param d_q(int): The dimension of a query
-    :param d_k(int): The dimension of a key
-    :param d_v(int): The dimension of a value
-    :param dropout(float): The probability of dropout
-    :param masked(bool): The probability of dropout
-    """
-    def __init__(self, num_heads, d_model, d_q, d_k, d_v, dropout, masked):
+class Attention(tf.layers.Layer):
+    """Multi-headed attention layer."""
+
+    def __init__(self, hidden_size, num_heads, attention_dropout, train):
+        if hidden_size % num_heads != 0:
+            raise ValueError("Hidden size must be evenly divisible by the number of "
+                             "heads.")
+
+        super(Attention, self).__init__()
+        self.hidden_size = hidden_size
         self.num_heads = num_heads
-        self.d_model = d_model
-        self.d_q = d_q
-        self.d_k = d_k
-        self.d_v = d_v
-        self.dropout = dropout
-        self.masked = masked
+        self.attention_dropout = attention_dropout
+        self.train = train
 
-    def _linear_projection(self, q, k, v):
-        with tf.variable_scope('attention_linear_projection', reuse=tf.AUTO_REUSE):
-            q = tf.layers.dense(q, self.d_q, use_bias=False)
-            k = tf.layers.dense(k, self.d_k, use_bias=False)
-            v = tf.layers.dense(v, self.d_V, use_bias=False)
-        return q, k, v
+        # Layers for linearly projecting the queries, keys, and values.
+        self.q_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="q")
+        self.k_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="k")
+        self.v_dense_layer = tf.layers.Dense(hidden_size, use_bias=False, name="v")
 
-    def _attention(self, qs, ks, vs):
-        d_k_per_head = self.d_k // self.num_heads
+        self.output_dense_layer = tf.layers.Dense(hidden_size, use_bias=False,
+                                                  name="output_transform")
 
-        qk = tf.matmul(qs, ks, transpose_b=True)
-        before_softmax = qk / (d_k_per_head ** 0.5)
+    def split_heads(self, x):
+        """Split x into different heads, and transpose the resulting value.
+        The tensor is transposed to insure the inner dimensions hold the correct
+        values during the matrix multiplication.
+        Args:
+          x: A tensor with shape [batch_size, length, hidden_size]
+        Returns:
+          A tensor with shape [batch_size, num_heads, length, hidden_size/num_heads]
+        """
+        with tf.name_scope("split_heads"):
+            batch_size = tf.shape(x)[0]
+            length = tf.shape(x)[1]
 
-        if self.masked:
-            diag_vals = tf.ones_like(before_softmax[0, 0, :, :])  # (batch_size, num_heads, query_dim, key_dim)
-            tril = tf.linalg.LinearOperatorLowerTriangular(diag_vals).to_dense()  # (q_dim, k_dim)
-            masks = tf.tile(tf.reshape(tril, [1, 1] + tril.get_shape().as_list()),
-                            [tf.shape(before_softmax)[0], tf.shape(before_softmax)[1], 1, 1])
-            paddings = tf.ones_like(masks) * -1e9
-            before_softmax = tf.where(tf.equal(masks, 0), paddings, before_softmax)
+            # Calculate depth of last dimension after it has been split.
+            depth = (self.hidden_size // self.num_heads)
 
-        after_softmax = tf.nn.softmax(before_softmax)
-        return tf.matmul(after_softmax, vs)
+            # Split the last dimension
+            x = tf.reshape(x, [batch_size, length, self.num_heads, depth])
 
-    def _split_heads(self, q, k, v):
-        def split_last_dimension_then_transpose(tensor, num_heads, dim):
-            t_shape = tensor.get_shape().as_list()
-            tensor = tf.reshape(tensor, [-1] + t_shape[1:-1] + [num_heads, dim // num_heads])
-            return tf.transpose(tensor, [0, 2, 1, 3]) # [batch_size, num_heads, max_seq_len, dim]
+            # Transpose the result
+            return tf.transpose(x, [0, 2, 1, 3])
 
-        qs = split_last_dimension_then_transpose(q, self.num_heads, self.d_q)
-        ks = split_last_dimension_then_transpose(k, self.num_heads, self.d_k)
-        vs = split_last_dimension_then_transpose(v, self.num_heads, self.d_v)
+    def combine_heads(self, x):
+        """Combine tensor that has been split.
+        Args:
+          x: A tensor [batch_size, num_heads, length, hidden_size/num_heads]
+        Returns:
+          A tensor with shape [batch_size, length, hidden_size]
+        """
+        with tf.name_scope("combine_heads"):
+            batch_size = tf.shape(x)[0]
+            length = tf.shape(x)[2]
+            x = tf.transpose(x, [0, 2, 1, 3])  # --> [batch, length, num_heads, depth]
+            return tf.reshape(x, [batch_size, length, self.hidden_size])
 
-        return qs, ks, vs
+    def call(self, x, y, bias, cache=None):
+        """Apply attention mechanism to x and y.
+        Args:
+          x: a tensor with shape [batch_size, length_x, hidden_size]
+          y: a tensor with shape [batch_size, length_y, hidden_size]
+          bias: attention bias that will be added to the result of the dot product.
+          cache: (Used during prediction) dictionary with tensors containing results
+            of previous attentions. The dictionary must have the items:
+                {"k": tensor with shape [batch_size, i, key_channels],
+                 "v": tensor with shape [batch_size, i, value_channels]}
+            where i is the current decoded length.
+        Returns:
+          Attention layer output with shape [batch_size, length_x, hidden_size]
+        """
+        # Linearly project the query (q), key (k) and value (v) using different
+        # learned projections. This is in preparation of splitting them into
+        # multiple heads. Multi-head attention uses multiple queries, keys, and
+        # values rather than regular attention (which uses a single q, k, v).
+        q = self.q_dense_layer(x)
+        k = self.k_dense_layer(y)
+        v = self.v_dense_layer(y)
 
-    def _concat_heads(self, head_outputs):
-        tensor = tf.transpose(head_outputs, [0, 2, 1, 3])  # [batch_size, max_seq_len, num_heads, dim]
-        t_shape = tensor.get_shape().as_list()
-        num_heads, dim = t_shape[-2:]
-        return tf.reshape(tensor, [-1] + t_shape[1:-2] + [num_heads * dim])
+        if cache is not None:
+            # Combine cached keys and values with new keys and values.
+            k = tf.concat([cache["k"], k], axis=1)
+            v = tf.concat([cache["v"], v], axis=1)
 
-    def multihead(self, q, k, v): # q==k==v
-        q, k, v = self._linear_projection(q, k, v)
-        qs, ks, vs = self._split_heads(q, k, v)
-        outputs = self._attention(qs, ks, vs)
-        output = self._concat_heads(outputs)
-        with tf.variable_scope('attention_w_o', reuse=tf.AUTO_REUSE):
-            output = tf.layers.dense(output, self.d_model)
+            # Update cache
+            cache["k"] = k
+            cache["v"] = v
 
-        return tf.nn.dropout(output, 1.0 - self.dropout)
+        # Split q, k, v into heads.
+        q = self.split_heads(q)
+        k = self.split_heads(k)
+        v = self.split_heads(v)
 
+        # Scale q to prevent the dot product between q and k from growing too large.
+        depth = (self.hidden_size // self.num_heads)
+        q *= depth ** -0.5
+
+        # Calculate dot product attention
+        logits = tf.matmul(q, k, transpose_b=True)
+        logits += bias
+        weights = tf.nn.softmax(logits, name="attention_weights")
+        if self.train:
+            weights = tf.nn.dropout(weights, 1.0 - self.attention_dropout)
+        attention_output = tf.matmul(weights, v)
+
+        # Recombine heads --> [batch_size, length, hidden_size]
+        attention_output = self.combine_heads(attention_output)
+
+        # Run the combined outputs through another linear projection layer.
+        attention_output = self.output_dense_layer(attention_output)
+        return attention_output
+
+
+class SelfAttention(Attention):
+    """Multiheaded self-attention layer."""
+
+    def call(self, x, bias, cache=None):
+        return super(SelfAttention, self).call(x, x, bias, cache)

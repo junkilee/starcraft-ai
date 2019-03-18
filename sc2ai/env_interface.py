@@ -9,8 +9,8 @@ class EnvironmentInterface(ABC):
     screen_dimensions = None
     num_actions = None
 
-    @classmethod
-    def _make_generator(cls, actions):
+    @staticmethod
+    def _make_generator(actions):
         """
         Utility method to create a generator out of a list of actions. Useful for the case where an action
         does not depend on the state at all. Has yields in the correct position to fit the format needed for the
@@ -29,9 +29,8 @@ class EnvironmentInterface(ABC):
         mask_input = np.stack([self.convert_state(timestep)[1] for timestep in timesteps], axis=0)
         return state_input, mask_input
 
-    @classmethod
     @abstractmethod
-    def convert_action(cls, action):
+    def convert_action(self, action):
         """
         Converts an action output from the agent into a pysc2 action.
         :param action: A tuple of (action_index, coordinates)
@@ -39,18 +38,54 @@ class EnvironmentInterface(ABC):
         """
         pass
 
-    @classmethod
     @abstractmethod
-    def convert_state(cls, timestep):
+    def convert_state(self, timestep):
         """
         :param timestep: Timestep obtained from pysc2 environment step.
         :return: Tuple of converted state (shape self.state_shape) and action mask
         """
         pass
 
-    @classmethod
-    def dummy_state(cls):
-        return np.ones(cls.state_shape), np.ones((cls.num_actions,))
+    def dummy_state(self):
+        return np.ones(self.state_shape), np.ones((self.num_actions,))
+
+
+class EmbeddingInterfaceWrapper(EnvironmentInterface):
+    """
+    Wraps an environment interface to add information about unit embeddings to the state. The state becomes a dictionary
+    with keys:
+        "unit_embeddings": numpy array of shape `[num_units, embedding_size]`, where `num_units` is arbitrary
+        "screen": numpy array of shape `[*self.state_shape]`
+    """
+
+    def __init__(self, interface):
+        self.interface = interface
+        self.unit_embedding_size = 4
+
+        self.state_shape = self.interface.state_shape
+        self.screen_dimensions = self.interface.screen_dimensions
+        self.num_actions = self.interface.num_actions
+
+    def convert_action(self, action):
+        return self.interface.convert_action(action)
+
+    def convert_state(self, timestep):
+        state, action_mask = self.interface.convert_state(timestep)
+        return {
+            "screen": state,
+            "unit_embeddings": self._get_unit_embeddings(timestep)
+        }, action_mask
+
+    def dummy_state(self):
+        num_units = 12  # TODO: Change back to zero after implementing unit embeddings
+        return {
+            "screen": self.interface.dummy_state(),
+            "unit_embeddings": np.zeros((num_units, self.unit_embedding_size))
+        }
+
+    def _get_unit_embeddings(self, timestep):
+        # TODO: This is a placeholder implementation implementation
+        return self.dummy_state()["unit_embeddings"]
 
 
 class RoachesEnvironmentInterface(EnvironmentInterface):

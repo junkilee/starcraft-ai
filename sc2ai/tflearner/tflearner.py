@@ -107,8 +107,7 @@ class ActorCriticLearner:
             if rollout.done:
                 feed_dict = {
                     self.rewards_input: rollout.rewards,
-                    **self.agent.get_feed_dict(rollout.states, rollout.masks,
-                                               rollout.actions, rollout.bootstrap_state)
+                    **self.agent.get_feed_dict(rollout.states, rollout.masks, rollout.actions, rollout.bootstrap_state)
                 }
 
                 loss, _ = self.session.run([self.loss, self.train_op], feed_dict=feed_dict)

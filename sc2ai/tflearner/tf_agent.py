@@ -4,6 +4,7 @@ import numpy as np
 
 from sc2ai.tflearner import util
 from sc2ai.tflearner import parts
+from sc2ai.tflearner.attention import MultiHeadedAttention, SelfAttention
 
 
 class ActorCriticAgent(ABC):
@@ -78,21 +79,21 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         self.num_screen_dims = int(len(self.interface.screen_dimensions) / 2)
 
         self.state_input = tf.placeholder(tf.float32, [None, *self.interface.state_shape])  # [batch, *state_shape]
-        self.bootstrap_state_input = tf.placeholder(tf.float32, [*self.interface.state_shape])
         self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions])  # [batch, num_actions]
         self.action_input = tf.placeholder(tf.int32, [None])   # [T]
         self.spacial_input = tf.placeholder(tf.int32, [None, 2])  # [T, 2]   dimension size 2 for x and y
 
-    def get_feed_dict(self, states, masks, actions, bootstrap_state):
-        nonspacial, spacial = zip(*actions)
-        spacial = [(13, 27) if spacial is None else spacial for spacial in spacial]
-        return {
-            self.action_input: np.array(nonspacial),
-            self.spacial_input: np.array(spacial),
+    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
+        feed_dict = {
             self.state_input: np.array(states),
             self.mask_input: np.array(masks),
-            self.bootstrap_state_input: np.array(bootstrap_state)
         }
+        if actions is not None:
+            nonspacial, spacial = zip(*actions)
+            spacial = [(13, 27) if spacial is None else spacial for spacial in spacial]
+            feed_dict[self.action_input] = np.array(nonspacial)
+            feed_dict[self.spacial_input] = np.array(spacial)
+        return feed_dict
 
     def sample_action_index(self, nonspacial_probs, spacial_probs_x, spacial_probs_y):
         chosen_nonspacials = util.sample_multiple(nonspacial_probs)  # [num_games]
@@ -135,6 +136,8 @@ class InterfaceAgent(ActorCriticAgent, ABC):
 class ConvAgent(InterfaceAgent):
     def __init__(self, interface):
         super().__init__(interface)
+        self.bootstrap_state_input = tf.placeholder(tf.float32, [*self.interface.state_shape])
+
         self.features = parts.conv_body(self.state_input)
         self.nonspacial_probs, self.spacial_probs_x, self.spacial_probs_y = self._probs_from_features(self.features)
 
@@ -151,6 +154,13 @@ class ConvAgent(InterfaceAgent):
 
         return self.sample_action_index(nonspacial_probs, spacial_probs_x, spacial_probs_y), None
 
+    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
+        feed_dict = super(ConvAgent, self).get_feed_dict(states, masks, actions, bootstrap_state)
+        return {
+            self.bootstrap_state_input: np.array(bootstrap_state),
+            **feed_dict
+        }
+
     def train_log_probs(self):
         return self._train_log_probs(self.nonspacial_probs, self.spacial_probs_x, self.spacial_probs_y)
 
@@ -166,10 +176,14 @@ class LSTMAgent(InterfaceAgent):
         super().__init__(interface)
 
         self.rnn_size = 256
-        self.memory_input = tf.placeholder(tf.float32, [2, None, self.rnn_size])
-        self.features = parts.conv_body(self.state_input)
-
+        self.self_attention = SelfAttention(hidden_size=128, num_heads=2, attention_dropout=0, train=True)
         self.lstm = tf.contrib.rnn.LSTMCell(self.rnn_size)
+
+        self.memory_input = tf.placeholder(tf.float32, [2, None, self.rnn_size])
+        self.unit_embeddings_input = tf.placeholder(tf.float32, [None, None, self.interface.unit_embedding_size])
+
+        self.features = self.features()
+
         lstm_output, self.next_state = self._lstm_step()
         self.train_output = self._lstm_step_train()
         self.all_values = parts.value_head(self.train_output)
@@ -178,20 +192,26 @@ class LSTMAgent(InterfaceAgent):
         self.nonspacial_train, self.spacial_train_x, self.spacial_train_y = \
             self._probs_from_features(self.train_output[:-1])
 
+    def features(self):
+        conv_features = parts.conv_body(self.state_input)
+        unit_features = tf.reduce_sum(self.self_attention(self.unit_embeddings_input, bias=0), axis=1)
+        return tf.concat([conv_features, unit_features], axis=1)
+
     def step(self, states, masks, memory):
         """
-        :param states: numpy array of shape [batch_size, *state_size]
+        :param states: List of states of length batch size. Usually numpy arrays of shape [*state_size]
         :param masks: numpy array of shape [batch_size, num_actions]
         :param memory: numpy of shape [2, batch_size, memory_size] or None for the first step
         """
         if memory is None:
-            memory = np.zeros((2, states.shape[0], self.rnn_size))
+            memory = np.zeros((2, len(states), self.rnn_size))
+
+        feed_dict = {
+            **self.get_feed_dict(states, masks),
+            self.memory_input: memory
+        }
         results = self.session.run(
-            [self.next_state, self.nonspacial_probs, *self.spacial_probs_x, *self.spacial_probs_y], {
-                self.state_input: states,
-                self.mask_input: masks,
-                self.memory_input: memory
-            })
+            [self.next_state, self.nonspacial_probs, *self.spacial_probs_x, *self.spacial_probs_y], feed_dict)
         next_state = results[0]
         nonspacial_probs = results[1]
         spacial_probs = results[2:]
@@ -212,9 +232,19 @@ class LSTMAgent(InterfaceAgent):
         train_output, _ = tf.nn.dynamic_rnn(self.lstm, flattened_state, dtype=tf.float32)
         return tf.squeeze(train_output, axis=0)
 
-    def get_feed_dict(self, states, masks, actions, bootstrap_state):
-        feed_dict = super(LSTMAgent, self).get_feed_dict(states, masks, actions, bootstrap_state)
-        feed_dict[self.state_input] = np.concatenate([states, np.expand_dims(bootstrap_state, axis=0)], axis=0)
+    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
+        screens = np.stack([state['screen'] for state in states], axis=0)
+        unit_embeddings = np.stack([state['unit_embeddings'] for state in states], axis=0)
+
+        feed_dict = super(LSTMAgent, self).get_feed_dict(screens, masks, actions)
+        if bootstrap_state is not None:
+            bootstrap_screen = np.expand_dims(bootstrap_state['screen'], axis=0)
+            bootstrap_units = np.expand_dims(bootstrap_state['unit_embeddings'], axis=0)
+            feed_dict[self.state_input] = np.concatenate([screens, bootstrap_screen], axis=0)
+            feed_dict[self.unit_embeddings_input] = np.concatenate([unit_embeddings, bootstrap_units], axis=0)
+        else:
+            feed_dict[self.state_input] = screens
+            feed_dict[self.unit_embeddings_input] = unit_embeddings
         return feed_dict
 
     def train_log_probs(self):

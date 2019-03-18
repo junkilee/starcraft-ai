@@ -7,7 +7,7 @@ from pysc2.env import sc2_env
 from pysc2.lib import point_flag
 from pysc2.maps import lib
 
-from sc2ai.env_interface import RoachesEnvironmentInterface, BeaconEnvironmentInterface, BanelingsEnvironmentInterface
+import sc2ai.env_interface as interfaces
 from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
 from sc2ai.tflearner.tflearner import ActorCriticLearner
 from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
@@ -84,11 +84,11 @@ def main(unused_argv):
     }
 
     if FLAGS.map in {'DefeatRoaches', 'StalkersVsRoaches'}:
-        interface = RoachesEnvironmentInterface()
+        interface = interfaces.RoachesEnvironmentInterface()
     elif FLAGS.map == 'MoveToBeacon':
-        interface = BeaconEnvironmentInterface()
+        interface = interfaces.EmbeddingInterfaceWrapper(interfaces.BeaconEnvironmentInterface())
     elif FLAGS.map == 'DefeatZerglingsAndBanelings':
-        interface = BanelingsEnvironmentInterface()
+        interface = interfaces.BanelingsEnvironmentInterface()
     else:
         raise Exception('Unsupported Map')
 

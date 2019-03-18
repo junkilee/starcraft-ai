@@ -96,7 +96,7 @@ class MultipleEnvironment:
 
     def get_results(self):
         states, masks, rewards, dones = zip(*[pipe.recv() for pipe in self.pipes])
-        return np.stack(states), np.stack(masks), np.stack(rewards), np.stack(dones)
+        return states, np.stack(masks), np.stack(rewards), np.stack(dones)
 
     def close(self):
         for pipe in self.pipes:
