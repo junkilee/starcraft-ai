@@ -10,7 +10,7 @@ from pysc2.maps import lib
 from sc2ai.env_interface import RoachesEnvironmentInterface, BeaconEnvironmentInterface, BanelingsEnvironmentInterface
 from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
 from sc2ai.tflearner.tflearner import ActorCriticLearner
-from sc2ai.tflearner.tf_agent import InterfaceAgent
+from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
 
 if __name__ == '__main__':
     FLAGS = flags.FLAGS
@@ -106,7 +106,7 @@ def main(unused_argv):
         num_instances = 1 if FLAGS.render else FLAGS.parallel
         environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
                                           num_instance=num_instances)
-        agent = InterfaceAgent(interface)
+        agent = LSTMAgent(interface)
         learner = ActorCriticLearner(environment, agent,
                                      save_dir=save_dir,
                                      load_model=load_model,

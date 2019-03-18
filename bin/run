@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 
 python -m sc2ai.run_agent \
---map StalkersVsRoaches \
---save_name temp \
+--map MoveToBeacon \
+--save_name lstm1 \
+--load_model \
 --norender \
 --step_mul 8 \
---parallel 3 \
+--parallel 2 \
 --gamma 0.95 \
 --td_lambda 0.95 \

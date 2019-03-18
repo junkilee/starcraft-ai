@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 import trfl
-import sys
 import os
 
 
@@ -122,8 +121,9 @@ class ActorCriticLearner:
         terminal state. Stores the complete result from each trajectory in `rollouts`.
         """
         states, masks, _, _ = self.env.reset()
+        memory = None
         while True:
-            action_indices = self.agent.step(states, masks)
+            action_indices, memory = self.agent.step(states, masks, memory)
             new_states, new_masks, rewards, dones = self.env.step(action_indices)
 
             for i, rollout in enumerate(self.rollouts):
