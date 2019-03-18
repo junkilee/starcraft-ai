@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 python -m sc2ai.run_agent \
---map MoveToBeacon \
---save_name lstm1 \
---load_model \
+--map StalkersVsRoaches \
+--save_name attention-stalkers-test \
 --norender \
 --step_mul 8 \
 --parallel 2 \

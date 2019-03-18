@@ -84,7 +84,7 @@ def main(unused_argv):
     }
 
     if FLAGS.map in {'DefeatRoaches', 'StalkersVsRoaches'}:
-        interface = interfaces.RoachesEnvironmentInterface()
+        interface = interfaces.EmbeddingInterfaceWrapper(interfaces.RoachesEnvironmentInterface())
     elif FLAGS.map == 'MoveToBeacon':
         interface = interfaces.EmbeddingInterfaceWrapper(interfaces.BeaconEnvironmentInterface())
     elif FLAGS.map == 'DefeatZerglingsAndBanelings':

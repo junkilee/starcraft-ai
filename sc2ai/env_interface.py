@@ -78,14 +78,15 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
 
     def dummy_state(self):
         num_units = 12  # TODO: Change back to zero after implementing unit embeddings
+        state, action_mask = self.interface.dummy_state()
         return {
-            "screen": self.interface.dummy_state(),
+            "screen": state,
             "unit_embeddings": np.zeros((num_units, self.unit_embedding_size))
-        }
+        }, action_mask
 
     def _get_unit_embeddings(self, timestep):
         # TODO: This is a placeholder implementation implementation
-        return self.dummy_state()["unit_embeddings"]
+        return self.dummy_state()[0]["unit_embeddings"]
 
 
 class RoachesEnvironmentInterface(EnvironmentInterface):

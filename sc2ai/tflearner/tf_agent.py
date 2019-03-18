@@ -4,7 +4,7 @@ import numpy as np
 
 from sc2ai.tflearner import util
 from sc2ai.tflearner import parts
-from sc2ai.tflearner.attention import MultiHeadedAttention, SelfAttention
+from sc2ai.tflearner.attention import SelfAttention
 
 
 class ActorCriticAgent(ABC):
