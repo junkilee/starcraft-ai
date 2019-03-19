@@ -85,15 +85,15 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
         }, action_mask
 
     def _get_unit_embeddings(self, timestep):
-          transformed_features = Features.transform_obs(timestep)
-          unit_vector = transformed_features["feature_units"]
-          # One hot encoding certain attributes
+        transformed_features = Features.transform_obs(timestep)
+        unit_vector = transformed_features["feature_units"]
+        # One hot encoding certain attributes
         for vec in unit_vector:
             unit_type_index = static_data.UNIT_TYPES.index(vec.unit_type)
-            vec.unit_type = [0 for i in range(len(static_data.UNIT_TYPES)) if i != unit_type_index else 1]
+            vec.unit_type = [0 if i != unit_type_index else 1 for i in range(len(static_data.UNIT_TYPES))]
             alliance_list = [0,1,2,3]
             alliance_index = alliance_list.index(vec.alliance)
-            vec.alliance = [0 for i in range(3) if i != alliance_index else 1]
+            vec.alliance = [0 if i != alliance_index else 1 for i in range(3)]
         return unit_vector
 
 
