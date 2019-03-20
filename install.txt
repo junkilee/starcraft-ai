@@ -1,0 +1,13 @@
+# Create new Conda Environment
+conda create -n sc-cpu python=3.6
+
+# Activate environment and install packages
+conda activate sc-cpu
+pip install -r requirements.txt
+./bin/setup
+
+# Notes on CPU vs GPU
+tensorflow-probability or tensorflow-proability-gpu
+
+# Run
+./bin/run

@@ -1,5 +1,6 @@
 import numpy as np
 from pysc2.lib import actions as pysc2_actions
+from pysc2.lib import static_data
 from pysc2.lib.features import PlayerRelative, FeatureUnit, Features
 from abc import ABC, abstractmethod
 
@@ -60,7 +61,7 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
 
     def __init__(self, interface):
         self.interface = interface
-        self.unit_embedding_size = 4
+        self.unit_embedding_size = len(self._get_embedding_columns()) + len(static_data.UNIT_TYPES)
 
         self.state_shape = self.interface.state_shape
         self.screen_dimensions = self.interface.screen_dimensions
@@ -84,16 +85,28 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
             "unit_embeddings": np.zeros((num_units, self.unit_embedding_size))
         }, action_mask
 
+    
+    def _get_embedding_columns(self):
+        return [ FeatureUnit.alliance, \
+                FeatureUnit.health, \
+                FeatureUnit.shield, \
+                FeatureUnit.energy, \
+                FeatureUnit.owner, \
+                FeatureUnit.x, \
+                FeatureUnit.y]
+
     def _get_unit_embeddings(self, timestep):
-        transformed_features = Features.transform_obs(timestep)
-        unit_vector = transformed_features["feature_units"]
-        # One hot encoding certain attributes
-        for vec in unit_vector:
-            unit_type_index = static_data.UNIT_TYPES.index(vec.unit_type)
-            vec.unit_type = [0 if i != unit_type_index else 1 for i in range(len(static_data.UNIT_TYPES))]
-            alliance_list = [0,1,2,3]
-            alliance_index = alliance_list.index(vec.alliance)
-            vec.alliance = [0 if i != alliance_index else 1 for i in range(3)]
+        unit_info = timestep.observation.feature_units
+        useful_columns = self._get_embedding_columns() 
+
+        adjusted_info = unit_info[:,useful_columns]
+       
+        NUM_UNIT_TYPES = len(static_data.UNIT_TYPES)
+        blizzard_unit_type = unit_info[:,FeatureUnit.unit_type]
+        pysc2_unit_type = [static_data.UNIT_TYPES.index(t) for t in blizzard_unit_type]
+        one_hot_unit_types = np.eye(NUM_UNIT_TYPES)[pysc2_unit_type]
+
+        unit_vector = np.concatenate([adjusted_info, one_hot_unit_types],axis=-1)
         return unit_vector
 
 

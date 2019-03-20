@@ -1,0 +1,28 @@
+echo "*** SETUP FOR SC2 ***"
+echo " - Run from Root Directory of Repo"
+echo
+
+MAPDIR="$SC2PATH/Maps/mini_games/"
+read -p "Removing current maps in $MAPDIR (y/n): "
+
+echo    # (optional) move to a new line
+if [[ ! $REPLY =~ ^[Yy]$ ]]
+then
+    echo "Aborting"
+   exit 1 
+fi
+
+if [ -d "$MAPDIR" ]; then
+    rm -rf $MAPDIR
+fi
+
+mkdir $MAPDIR
+
+cp maps/*.SC2Map $MAPDIR
+
+echo
+echo "Current Maps: $MAPDIR"
+ls $MAPDIR
+
+echo
+echo "*** Setup Finished***"

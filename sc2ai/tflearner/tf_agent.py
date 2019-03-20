@@ -233,6 +233,7 @@ class LSTMAgent(InterfaceAgent):
         return tf.squeeze(train_output, axis=0)
 
     def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
+
         screens = np.stack([state['screen'] for state in states], axis=0)
         unit_embeddings = np.stack([state['unit_embeddings'] for state in states], axis=0)
 
@@ -245,6 +246,7 @@ class LSTMAgent(InterfaceAgent):
         else:
             feed_dict[self.state_input] = screens
             feed_dict[self.unit_embeddings_input] = unit_embeddings
+
         return feed_dict
 
     def train_log_probs(self):
