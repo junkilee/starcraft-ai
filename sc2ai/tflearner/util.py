@@ -2,6 +2,28 @@ import numpy as np
 import tensorflow as tf
 
 
+def pad_stack(arrays, pad_axis, stack_axis):
+    """
+    Similar to np.stack, but for arrays whose shapes differ in one dimension. First pads all arrays to match the size
+    of the largest array in that dimension with 0. Then calls np.stack.
+
+    :param arrays: List of numpy arrays. Arrays have must be the same shape except in the `pad_axis` axis.
+    :param pad_axis: The axis to pad.
+    :param stack_axis: The axis in the result array along which the input arrays are stacked.
+
+    :return: The stacked array which has one more dimension than the input arrays.
+    """
+    max_dim_size = np.max([arr.shape[pad_axis] for arr in arrays])
+    paddeds = []
+    for array in arrays:
+        shape = np.array(array.shape)
+        shape[pad_axis] = max_dim_size - shape[pad_axis]
+        padding = np.zeros(shape)
+        padded = np.concatenate([array, padding], axis=pad_axis)
+        paddeds.append(padded)
+    return np.stack(paddeds, axis=stack_axis)
+
+
 def index(source, indices):
     """
     :param source: shape [T, num_actions, (N)] tensor. (N) is any number of additional dimensions.

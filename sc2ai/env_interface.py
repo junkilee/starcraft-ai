@@ -87,26 +87,25 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
 
     
     def _get_embedding_columns(self):
-        return [ FeatureUnit.alliance, \
-                FeatureUnit.health, \
-                FeatureUnit.shield, \
-                FeatureUnit.energy, \
-                FeatureUnit.owner, \
-                FeatureUnit.x, \
-                FeatureUnit.y]
+        return np.array([FeatureUnit.alliance,
+                         FeatureUnit.health,
+                         FeatureUnit.shield,
+                         FeatureUnit.energy,
+                         FeatureUnit.owner,
+                         FeatureUnit.x,
+                         FeatureUnit.y])
 
     def _get_unit_embeddings(self, timestep):
-        unit_info = timestep.observation.feature_units
-        useful_columns = self._get_embedding_columns() 
+        unit_info = np.array(timestep.observation.feature_units)
+        useful_columns = self._get_embedding_columns()
+        adjusted_info = unit_info[:, np.array(useful_columns)]
 
-        adjusted_info = unit_info[:,useful_columns]
-       
-        NUM_UNIT_TYPES = len(static_data.UNIT_TYPES)
-        blizzard_unit_type = unit_info[:,FeatureUnit.unit_type]
+        num_unit_types = len(static_data.UNIT_TYPES)
+        blizzard_unit_type = unit_info[:, FeatureUnit.unit_type]
         pysc2_unit_type = [static_data.UNIT_TYPES.index(t) for t in blizzard_unit_type]
-        one_hot_unit_types = np.eye(NUM_UNIT_TYPES)[pysc2_unit_type]
+        one_hot_unit_types = np.eye(num_unit_types)[pysc2_unit_type]
 
-        unit_vector = np.concatenate([adjusted_info, one_hot_unit_types],axis=-1)
+        unit_vector = np.concatenate([adjusted_info, one_hot_unit_types], axis=-1)
         return unit_vector
 
 

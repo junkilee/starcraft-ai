@@ -233,19 +233,18 @@ class LSTMAgent(InterfaceAgent):
         return tf.squeeze(train_output, axis=0)
 
     def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
-
         screens = np.stack([state['screen'] for state in states], axis=0)
-        unit_embeddings = np.stack([state['unit_embeddings'] for state in states], axis=0)
 
         feed_dict = super(LSTMAgent, self).get_feed_dict(screens, masks, actions)
+        all_states = states if bootstrap_state is None else [*states, bootstrap_state]
+        unit_embeddings = util.pad_stack([state['unit_embeddings'] for state in all_states], pad_axis=0, stack_axis=0)
+        feed_dict[self.unit_embeddings_input] = unit_embeddings
+
         if bootstrap_state is not None:
             bootstrap_screen = np.expand_dims(bootstrap_state['screen'], axis=0)
-            bootstrap_units = np.expand_dims(bootstrap_state['unit_embeddings'], axis=0)
             feed_dict[self.state_input] = np.concatenate([screens, bootstrap_screen], axis=0)
-            feed_dict[self.unit_embeddings_input] = np.concatenate([unit_embeddings, bootstrap_units], axis=0)
         else:
             feed_dict[self.state_input] = screens
-            feed_dict[self.unit_embeddings_input] = unit_embeddings
 
         return feed_dict
 

@@ -96,10 +96,7 @@ class MultipleEnvironment:
 
     def get_results(self):
         states, masks, rewards, dones = zip(*[pipe.recv() for pipe in self.pipes])
-        try:
-            return states, np.stack(masks), np.stack(rewards), np.stack(dones)
-        except Exception:
-            a = 1 + 1
+        return states, np.stack(masks), np.stack(rewards), np.stack(dones)
 
     def close(self):
         for pipe in self.pipes:
