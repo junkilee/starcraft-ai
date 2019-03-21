@@ -1,0 +1,4 @@
+pysc2
+trfl
+tensorflow-gpu==1.12
+tensorflow-probability-gpu
