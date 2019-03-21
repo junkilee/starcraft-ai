@@ -4,6 +4,8 @@ This repository contain the source code to develop explainable AI systems for pl
 
 # Installation
 
+** Note that currently Brown CS GPUs are not supported by Tensorflow. Use CPU version instead **
+
 ## Create new Conda Environment (CPU or GPU)
 `conda create -n sc-cpu python=3.6`  
 `conda create -n sc-gpu python=3.6`
