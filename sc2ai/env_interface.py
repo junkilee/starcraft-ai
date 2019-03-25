@@ -97,6 +97,8 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
 
     def _get_unit_embeddings(self, timestep):
         unit_info = np.array(timestep.observation.feature_units)
+        if unit_info.shape[0] == 0:
+            return np.zeros((0, self.unit_embedding_size))
         useful_columns = self._get_embedding_columns()
         adjusted_info = unit_info[:, np.array(useful_columns)]
 

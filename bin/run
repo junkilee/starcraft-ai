@@ -5,6 +5,7 @@ python -m sc2ai.run_agent \
 --save_name attention-stalkers-test \
 --norender \
 --step_mul 8 \
---parallel 2 \
+--parallel 15 \
 --gamma 0.95 \
 --td_lambda 0.95 \
+--load_model \
