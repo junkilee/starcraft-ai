@@ -21,7 +21,7 @@ class FullyConvPolicy:
         self.trainable = trainable
         self.unittype_emb_dim = agent.unit_type_emb_dim
 
-    
+
 
     def _build_convs(self, inputs, name):
         conv1 = layers.conv2d(

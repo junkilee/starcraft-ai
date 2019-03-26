@@ -22,5 +22,11 @@
 
 ## Install pysc2
  - Please install it from the source code
-   - http://github.com/deepmind/pysc2
+   - http://github.com/junkilee/pysc2
    - `pip install -e .`
+
+## Install docker
+ - Installation instructions for Ubuntu
+   - https://docs.docker.com/install/linux/docker-ce/ubuntu/
+ - Post installation setup
+   - https://docs.docker.com/install/linux/linux-postinstall/
