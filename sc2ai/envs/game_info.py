@@ -14,6 +14,7 @@ SC2EnvOptions = namedtuple('SC2EnvOptions', ('render', 'feature_screen_size', 'f
                                              'step_mul',
                                              'agent1_name', 'agent1_race', 'agent2_name', 'agent2_race',
                                              'difficulty', 'profile', 'trace', 'parallel', 'save_replay'))
+""" The definition of SC2EnvOptions """
 
 default_env_options = SC2EnvOptions(render=False,
                                     feature_screen_size=screen_size,
@@ -37,6 +38,7 @@ default_env_options = SC2EnvOptions(render=False,
                                     trace=False,
                                     parallel=1,
                                     save_replay=True)
+""" The default value for the SC2EnvOptions. """
 
 class ActionIDs:
     NO_OP = actions.FUNCTIONS.no_op.id
