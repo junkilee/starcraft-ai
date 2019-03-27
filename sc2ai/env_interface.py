@@ -1,14 +1,23 @@
+from enum import Enum
+
 import numpy as np
 from pysc2.lib import actions as pysc2_actions
 from pysc2.lib import static_data
-from pysc2.lib.features import PlayerRelative, FeatureUnit, Features
+from pysc2.lib.features import PlayerRelative, FeatureUnit
 from abc import ABC, abstractmethod
+
+
+class ParamType(Enum):
+    SPACIAL = 1
+    SELECT_UNIT = 2
+    NO_PARAMS = 3
 
 
 class EnvironmentInterface(ABC):
     state_shape = None
     screen_dimensions = None
     num_actions = None
+    num_unit_selection_actions = 0
 
     @staticmethod
     def _make_generator(actions):
@@ -66,27 +75,34 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
         self.state_shape = self.interface.state_shape
         self.screen_dimensions = self.interface.screen_dimensions
         self.num_actions = self.interface.num_actions
+        self.num_unit_selection_actions = self.interface.num_unit_selection_actions
 
     def convert_action(self, action):
         return self.interface.convert_action(action)
 
     def convert_state(self, timestep):
         state, action_mask = self.interface.convert_state(timestep)
+        coord_columns = np.array([
+            FeatureUnit.x,
+            FeatureUnit.y,
+        ])
         return {
             "screen": state,
-            "unit_embeddings": self._get_unit_embeddings(timestep)
-        }, action_mask
+            "unit_embeddings": self._get_unit_embeddings(timestep, self._get_embedding_columns()),
+            "unit_coords": self._get_unit_embeddings(timestep, coord_columns)
+        }, self._augment_mask(timestep, action_mask)
 
     def dummy_state(self):
-        num_units = 12  # TODO: Change back to zero after implementing unit embeddings
+        num_units = 0
         state, action_mask = self.interface.dummy_state()
         return {
             "screen": state,
-            "unit_embeddings": np.zeros((num_units, self.unit_embedding_size))
+            "unit_embeddings": np.zeros((num_units, self.unit_embedding_size)),
+            "unit_coords": np.zeros((num_units, 2 + len(static_data.UNIT_TYPES)))
         }, action_mask
 
-    
-    def _get_embedding_columns(self):
+    @staticmethod
+    def _get_embedding_columns():
         return np.array([FeatureUnit.alliance,
                          FeatureUnit.health,
                          FeatureUnit.shield,
@@ -95,11 +111,11 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
                          FeatureUnit.x,
                          FeatureUnit.y])
 
-    def _get_unit_embeddings(self, timestep):
+    def _get_unit_embeddings(self, timestep, useful_columns):
         unit_info = np.array(timestep.observation.feature_units)
         if unit_info.shape[0] == 0:
-            return np.zeros((0, self.unit_embedding_size))
-        useful_columns = self._get_embedding_columns()
+            # Set to 1 instead of 0 so no empty embedding situation. Zeros are treated as masked so this is okay.
+            return np.zeros((1, self.unit_embedding_size))
         adjusted_info = unit_info[:, np.array(useful_columns)]
 
         num_unit_types = len(static_data.UNIT_TYPES)
@@ -110,11 +126,36 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
         unit_vector = np.concatenate([adjusted_info, one_hot_unit_types], axis=-1)
         return unit_vector
 
+    def _augment_mask(self, timestep, mask):
+        """
+        Sets unit selection actions to 0 in the mask if there are no units remaining.
+        """
+        embeddings = self._get_unit_embeddings(timestep, self._get_embedding_columns())
+        units_exist = len(embeddings[0]) != 0
+
+        if not units_exist:
+            mask[self.num_actions:self.num_actions + self.num_unit_selection_actions] = 0
+        return mask
+
+    def action_parameter_type(self, action_index):
+        """
+        :param action_index: Index into nonspacial actions
+        :return: Tuple of
+            param_type: The type of parameters this action takes
+            param_index: Index into all of the actions that takes this kind of parameter
+        """
+        if action_index < int(len(self.screen_dimensions) / 2):
+            return ParamType.SPACIAL, action_index
+        elif action_index < self.num_unit_selection_actions + int(len(self.screen_dimensions) / 2):
+            return ParamType.SELECT_UNIT, action_index - int(len(self.screen_dimensions) / 2)
+        return ParamType.NO_PARAMS, None
+
 
 class RoachesEnvironmentInterface(EnvironmentInterface):
     state_shape = [3, 84, 84]
-    screen_dimensions = [84, 84, 84, 84, 84, 84]
-    num_actions = 4
+    screen_dimensions = [84, 84, 84, 84]
+    num_actions = 5
+    num_unit_selection_actions = 2
 
     @classmethod
     def _get_action_mask(cls, timestep):
@@ -162,12 +203,17 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
 
     @classmethod
     def convert_action(cls, action):
-        action_index, coords = action
-        coords = coords if coords is not None else (9, 14)
+        action_index, coords, selection_coords, selection_index = action
+        coords = coords if coords is not None else (-1, -1)
+        selection_coords = selection_coords if selection_coords is not None else (-1, -1)
+
+        # The order for the actions is important. Actions that take spacial arguments must go first, followed by
+        # actions which take selection arguments, followed by actions that take no arguments.
         actions = [
             cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', coords)]),
             cls._make_generator([pysc2_actions.FUNCTIONS.Move_screen('now', coords)]),
-            cls._rotate_action(*coords),
+            cls._rotate_action(*selection_coords),
+            cls._make_generator([pysc2_actions.FUNCTIONS.select_point('select', selection_coords)]),
             cls._make_generator([pysc2_actions.FUNCTIONS.select_army('select')])
         ]
         return actions[action_index]

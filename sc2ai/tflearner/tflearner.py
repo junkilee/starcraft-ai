@@ -91,7 +91,10 @@ class ActorCriticLearner:
             self.session.run(tf.global_variables_initializer())
             self.saver = tf.train.Saver()
             if load_model:
-                self.load_model()
+                try:
+                    self.load_model()
+                except ValueError:
+                    pass
             else:
                 open(self.rewards_path, 'w').close()
 

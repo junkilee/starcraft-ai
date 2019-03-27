@@ -53,6 +53,35 @@ def actor_spacial_head(features, sizes):
     return spacial_x, spacial_y
 
 
+def actor_pointer_head(features, embeddings, num_heads):
+    """
+    Feed forward network that performs attention on on the embeddings using features `num_head` times.
+
+    :param features: Tensor of shape `[batch_size, num_features]`
+    :param embeddings: Tensor of shape `[batch_size, num_units, embedding_size]`
+    :param num_heads: An integer representing the number of separate softmax distributions to output.
+
+    :return: A softmax distribution over the units in the embedding of shape `[batch_size, num_heads, num_units]`
+    """
+    with tf.variable_scope('pointer_head', reuse=tf.AUTO_REUSE):
+        hidden_size = 32
+        mapped_features = tf.layers.dense(features, hidden_size, activation=None, use_bias=False)
+        mapped_embeddings = tf.layers.dense(embeddings, hidden_size, activation=None, use_bias=False)
+
+        mapped_features = tf.expand_dims(mapped_features, axis=1)
+        logits = tf.layers.dense(tf.tanh(mapped_features + mapped_embeddings), num_heads,
+                                 activation=None, use_bias=False)
+        logits = tf.transpose(logits, [0, 2, 1])  # Now shape [batch_size, num_heads, num_units]
+
+        # If embedding is all zeros, then this "unit" is padding and should be masked out
+        is_real_unit_mask = tf.not_equal(tf.reduce_sum(embeddings, axis=-1), tf.constant(0, dtype=tf.float32))
+        is_real_unit_mask = tf.expand_dims(is_real_unit_mask, axis=1)
+
+        # TODO: Check math to make sure this is equivalent to not masking:
+        probs = tf.nn.softmax(logits + 1e-10) * tf.cast(is_real_unit_mask, dtype=tf.float32) + 1e-10
+        return probs / tf.reduce_sum(probs, axis=-1, keepdims=True)
+
+
 def actor_nonspacial_head(features, action_mask, num_actions):
     """
     Feed forward network to produce the nonspacial action probabilities.
@@ -64,7 +93,7 @@ def actor_nonspacial_head(features, action_mask, num_actions):
     """
     with tf.variable_scope('actor_nonspacial', reuse=tf.AUTO_REUSE):
         probs = tf.layers.dense(features, units=num_actions, activation=tf.nn.softmax, name='output')
-    masked = (probs + 0.000001) * action_mask
+    masked = (probs + 1e-10) * action_mask
     return masked / tf.reduce_sum(masked, axis=1, keepdims=True)
 
 

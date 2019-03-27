@@ -2,10 +2,11 @@
 
 python -m sc2ai.run_agent \
 --map StalkersVsRoaches \
---save_name attention-stalkers-test \
+--save_name stalkers-ptr1 \
+--load_model \
 --norender \
 --step_mul 8 \
---parallel 15 \
---gamma 0.95 \
---td_lambda 0.95 \
+--parallel 4 \
+--gamma 0.97 \
+--td_lambda 0.97 \
 --load_model \

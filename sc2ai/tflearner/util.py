@@ -44,6 +44,7 @@ def index(source, indices):
 def sample_multiple(probabilities):
     """
     Treats each row of a 2d matrix as a probability distribution and returns sampled indices
+
     :param probabilities: predictions with shape [batch_size, output_size]
     :return: sampled indices with shape [batch_size]
     """
