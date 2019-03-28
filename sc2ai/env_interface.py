@@ -108,6 +108,7 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
                          FeatureUnit.shield,
                          FeatureUnit.energy,
                          FeatureUnit.owner,
+                         FeatureUnit.is_selected,
                          FeatureUnit.x,
                          FeatureUnit.y])
 
@@ -154,8 +155,8 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
 class RoachesEnvironmentInterface(EnvironmentInterface):
     state_shape = [3, 84, 84]
     screen_dimensions = [84, 84, 84, 84]
-    num_actions = 5
-    num_unit_selection_actions = 2
+    num_actions = 7
+    num_unit_selection_actions = 3
 
     @classmethod
     def _get_action_mask(cls, timestep):
@@ -213,9 +214,13 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
         actions = [
             cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', coords)]),
             cls._make_generator([pysc2_actions.FUNCTIONS.Move_screen('now', coords)]),
+
             cls._rotate_action(*selection_coords),
             cls._make_generator([pysc2_actions.FUNCTIONS.select_point('select', selection_coords)]),
-            cls._make_generator([pysc2_actions.FUNCTIONS.select_army('select')])
+            cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', selection_coords)]),
+
+            cls._make_generator([pysc2_actions.FUNCTIONS.select_army('select')]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.no_op()])
         ]
         return actions[action_index]
 

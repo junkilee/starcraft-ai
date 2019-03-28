@@ -190,6 +190,9 @@ class LSTMAgent(InterfaceAgent):
                                                     name="unit_embeddings_input")
         self.unit_selection_input = tf.placeholder(tf.int32, [None], name="unit_selection_input")
 
+        # TODO: Add in previous action index as an input
+        self.prev_action_input = tf.placeholder(tf.int32, [None], name='prev_action_input')
+
         self.features = self.features()  # Shape [batch_size, num_features]
 
         lstm_output, self.next_lstm_state = self._lstm_step()
