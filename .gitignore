@@ -122,3 +122,5 @@ outimages/
 saves/
 archive/
 qsub-out/
+
+bin/download-re*

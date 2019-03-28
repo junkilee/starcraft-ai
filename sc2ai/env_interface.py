@@ -206,6 +206,7 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
         action_index, coords, selection_coords, selection_index = action
         coords = coords if coords is not None else (-1, -1)
         selection_coords = selection_coords if selection_coords is not None else (-1, -1)
+        selection_coords = np.clip(selection_coords, a_min=0, a_max=83)
 
         # The order for the actions is important. Actions that take spacial arguments must go first, followed by
         # actions which take selection arguments, followed by actions that take no arguments.

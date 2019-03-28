@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-
-directory=${1:-recent}
-scp -r brendan@10.38.44.134:/home/brendan/StarCraftII/Replays/saves/${directory}/replays/ ./saves/${directory}/

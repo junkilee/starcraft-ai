@@ -9,4 +9,3 @@ python -m sc2ai.run_agent \
 --parallel 4 \
 --gamma 0.97 \
 --td_lambda 0.97 \
---load_model \
