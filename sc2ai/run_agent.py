@@ -45,6 +45,7 @@ if __name__ == '__main__':
     flags.DEFINE_bool("load_model", False, "Whether to load the previous run's model")
 
     flags.DEFINE_float("gamma", 0.96, "Discount factor")
+    flags.DEFINE_float("learning_rate", 0.0003, "Learning rate")
     flags.DEFINE_float("td_lambda", 0.96, "Lambda value for generalized advantage estimation")
 
     flags.mark_flag_as_required("map")
@@ -111,7 +112,8 @@ def main(unused_argv):
                                      save_dir=save_dir,
                                      load_model=load_model,
                                      gamma=FLAGS.gamma,
-                                     td_lambda=FLAGS.td_lambda)
+                                     td_lambda=FLAGS.td_lambda,
+                                     learning_rate=FLAGS.learning_rate)
 
         try:
             for i in range(1000):

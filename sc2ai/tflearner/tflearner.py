@@ -61,7 +61,8 @@ class ActorCriticLearner:
                  save_dir="./",
                  load_model=False,
                  gamma=0.96,
-                 td_lambda=0.96):
+                 td_lambda=0.96,
+                 learning_rate=0.0003):
         """
         :param environment: An instance of `MultipleEnvironment` to be used to generate trajectories.
         :param agent: An instance of `ActorCriticAgent` to be used to generate actions.
@@ -86,7 +87,7 @@ class ActorCriticLearner:
         with self.agent.graph.as_default():
             self.rewards_input = tf.placeholder(tf.float32, [None])
             self.loss = self._ac_loss()
-            self.train_op = tf.train.AdamOptimizer(0.0003).minimize(self.loss)
+            self.train_op = tf.train.AdamOptimizer(learning_rate).minimize(self.loss)
             self.session = self.agent.session
             self.session.run(tf.global_variables_initializer())
             self.saver = tf.train.Saver()
