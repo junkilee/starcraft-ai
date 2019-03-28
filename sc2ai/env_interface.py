@@ -164,7 +164,7 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
         if pysc2_actions.FUNCTIONS.Attack_screen.id not in timestep.observation.available_actions:
             mask[0] = 0
             mask[1] = 0
-            mask[3] = 0
+            mask[4] = 0
         return mask
 
     @classmethod
