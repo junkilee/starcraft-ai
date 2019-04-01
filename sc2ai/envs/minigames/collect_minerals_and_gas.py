@@ -2,9 +2,9 @@ import numpy as np
 from gym import spaces
 from pysc2.lib import actions, features
 
-from ..minigame import MiniGameEnv
+from ..sc2env import MiniGameEnv
 
-class DefeatZerglingsEnv(MiniGameEnv):
+class CollectMineralAndGasEnv(MiniGameEnv):
     """
 
     """

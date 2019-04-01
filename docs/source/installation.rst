@@ -32,8 +32,11 @@ Install pysc2
    - http://github.com/junkilee/pysc2
    - `pip install -e .`
 
-## Install docker
+Install docker
+-------------
  - Installation instructions for Ubuntu
    - https://docs.docker.com/install/linux/docker-ce/ubuntu/
  - Post installation setup
    - https://docs.docker.com/install/linux/linux-postinstall/
+ - Nvidia-docker setup
+   - https://github.com/NVIDIA/nvidia-docker

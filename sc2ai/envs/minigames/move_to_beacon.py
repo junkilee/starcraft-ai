@@ -2,12 +2,14 @@ import numpy as np
 from gym import spaces
 from pysc2.lib import actions, features
 
-from ..minigame import MiniGameEnv
+from ..sc2env import MiniGameEnv
 
-class MoveToBeaconDiscreteEnv(MiniGameEnv):
+class MoveToBeaconEnv(MiniGameEnv):
+    """
+
+    """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        
     
     def _process_reward(self, reward, raw_obs):
         raise NotImplementedError
