@@ -2,11 +2,19 @@ from pysc2.lib import actions as pysc2_actions
 
 
 def convert_to_gym_action_spaces(actionlist):
+    gym_space = None
 
-
-class Action():
-    def __init__():
+    for action in  actionlist:
         pass
+
+    return gym_space
+
+class Action:
+    """
+
+    """
+    def __init__(self):
+        return None
 
     def __call__(self):
         return

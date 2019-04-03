@@ -33,9 +33,9 @@ def make_sc2env(**kwargs):
 
     """
     cls = None
-    if kwargs["map"] is not in MAP_ENV_MAPPINGS:
+    if kwargs["map"] not in MAP_ENV_MAPPINGS:
         raise Exception("The map is unknown and not registered.")
-    else
+    else:
         cls = MAP_ENV_MAPPINGS[kwargs["map"]]
 
     return gym.make(cls(**kwargs))
@@ -173,14 +173,6 @@ class SC2Env(gym.Env):
         self._available_actions = obs.observation['available_actions']
         return obs
 
-    @property
-    def action_space(self):
-        raise self._action_space
-    
-    @property
-    def observation_space(self):
-        raise self.observation_space
-
 
 class MiniGameEnv(SC2Env):
     """Providing a wrapper for minigames. Mainly supports preprocessing of both reward and observation.
@@ -195,7 +187,7 @@ class MiniGameEnv(SC2Env):
 
     def _reset(self):
         obs = super()._reset()
-        return _process_observation(self, obs)
+        return self._process_observation(self, obs)
 
     def _step(self, action):
         raw_obs, reward, done, info = super()._step(self, action)
