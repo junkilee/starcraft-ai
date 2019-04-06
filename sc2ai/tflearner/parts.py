@@ -64,7 +64,7 @@ def actor_pointer_head(features, embeddings, num_heads):
     :return: A softmax distribution over the units in the embedding of shape `[batch_size, num_heads, num_units]`
     """
     with tf.variable_scope('pointer_head', reuse=tf.AUTO_REUSE):
-        hidden_size = 32
+        hidden_size = 50
         mapped_features = tf.layers.dense(features, hidden_size, activation=None, use_bias=False)
         mapped_embeddings = tf.layers.dense(embeddings, hidden_size, activation=None, use_bias=False)
 

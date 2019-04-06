@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 python -m sc2ai.run_agent \
---map StalkersVsRoaches \
---save_name stalkers-ptr1 \
+--map BuildMarines \
+--save_name build-marines1 \
 --load_model \
 --norender \
 --step_mul 8 \
---parallel 4 \
+--parallel 2 \
 --gamma 0.97 \
 --td_lambda 0.97 \
---learning_rate 0.00015 \
+--learning_rate 0.0003 \

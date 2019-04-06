@@ -234,6 +234,64 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
         return np.stack([beacon, player, health], axis=0), cls._get_action_mask(timestep)
 
 
+class TrainMarines(RoachesEnvironmentInterface):
+    state_shape = [3, 84, 84]
+    num_actions = 7
+    screen_dimensions = [84, 84] * 3
+    num_unit_selection_actions = 1
+
+    @classmethod
+    def _get_action_mask(cls, timestep):
+        mask = np.ones([cls.num_actions])
+        actions = [
+            pysc2_actions.FUNCTIONS.Move_screen.id,
+            pysc2_actions.FUNCTIONS.Build_Barracks_screen.id,
+            pysc2_actions.FUNCTIONS.Build_SupplyDepot_screen.id,
+
+            pysc2_actions.FUNCTIONS.select_point.id,
+
+            pysc2_actions.FUNCTIONS.select_idle_worker.id,
+            pysc2_actions.FUNCTIONS.Train_Marine_quick.id,
+            pysc2_actions.FUNCTIONS.select_rect.id,
+            pysc2_actions.FUNCTIONS.no_op.id,
+        ]
+        for i, action in enumerate(actions):
+            if action not in timestep.observation.available_actions:
+                mask[i] = 0
+        return mask
+
+    @classmethod
+    def convert_action(cls, action):
+        action_index, coords, selection_coords, selection_index = action
+        coords = coords if coords is not None else (-1, -1)
+        selection_coords = selection_coords if selection_coords is not None else (-1, -1)
+        selection_coords = np.clip(selection_coords, a_min=0, a_max=83)
+
+        # The order for the actions is important. Actions that take spacial arguments must go first, followed by
+        # actions which take selection arguments, followed by actions that take no arguments.
+        actions = [
+            cls._make_generator([pysc2_actions.FUNCTIONS.Move_screen('now', coords)]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.Build_Barracks_screen('now', coords)]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.Build_SupplyDepot_screen('now', coords)]),
+
+            cls._make_generator([pysc2_actions.FUNCTIONS.select_point('select', selection_coords)]),
+
+            cls._make_generator([pysc2_actions.FUNCTIONS.select_idle_worker('select')]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.Train_Marine_quick('now')]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.select_rect('select', [0, 0], [83, 83])]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.no_op()])
+        ]
+        return actions[action_index]
+
+    @classmethod
+    def convert_state(cls, timestep):
+        feature_screen = timestep.observation.feature_screen
+        none = (np.array(feature_screen.player_relative) == PlayerRelative.NONE).astype(np.float32)
+        neutral = (np.array(feature_screen.player_relative) == PlayerRelative.NEUTRAL).astype(np.float32)
+        player = (np.array(feature_screen.player_relative) == PlayerRelative.SELF).astype(np.float32)
+        return np.stack([none, neutral, player], axis=0), cls._get_action_mask(timestep)
+
+
 class BanelingsEnvironmentInterface(RoachesEnvironmentInterface):
     state_shape = [3, 84, 84]
     screen_dimensions = [84, 84, 84, 84, 84, 84]

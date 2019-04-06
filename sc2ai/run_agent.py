@@ -90,6 +90,8 @@ def main(unused_argv):
         interface = interfaces.EmbeddingInterfaceWrapper(interfaces.BeaconEnvironmentInterface())
     elif FLAGS.map == 'DefeatZerglingsAndBanelings':
         interface = interfaces.BanelingsEnvironmentInterface()
+    elif FLAGS.map == 'BuildMarines':
+        interface = interfaces.EmbeddingInterfaceWrapper(interfaces.TrainMarines())
     else:
         raise Exception('Unsupported Map')
 
