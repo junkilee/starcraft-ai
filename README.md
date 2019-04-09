@@ -32,4 +32,4 @@ To schedule a job on the brown grid, navigate to the project root directory and 
 
 `qsub -now y ./bin/grid-run`
 
-This will run ./bin/run/ on the grid
+This will run ./bin/run/ on the grid.
