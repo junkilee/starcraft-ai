@@ -127,6 +127,12 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
         unit_vector = np.concatenate([adjusted_info, one_hot_unit_types], axis=-1)
         return unit_vector
 
+    def at_beacon(self,timestep):
+        """
+        TODO: Check if a unit is at the beacon using x and y coordinates from timestep
+        """
+        pass
+
     def _augment_mask(self, timestep, mask):
         """
         Sets unit selection actions to 0 in the mask if there are no units remaining.
@@ -368,4 +374,12 @@ class BeaconEnvironmentInterface(EnvironmentInterface):
         player_relative = timestep.observation.feature_screen.player_relative
         beacon = (np.array(player_relative) == 3).astype(np.float32)
         player = (np.array(player_relative) == 1).astype(np.float32)
+        #TODO: Include list of true/false values for propositions
         return np.stack([beacon, player], axis=0), cls._get_action_mask(timestep)
+
+    @classmethod
+    def convert_reward(self,timestep,action):
+        """
+        TODO: Convert timestep and action into reward to be used by GLTL
+        """
+        pass
