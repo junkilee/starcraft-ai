@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 echo "*** SETUP FOR SC2 ***"
 echo " - Run from Root Directory of Repo"
 echo

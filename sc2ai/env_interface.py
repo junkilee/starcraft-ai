@@ -236,7 +236,7 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
 
 class TrainMarines(RoachesEnvironmentInterface):
     state_shape = [3, 84, 84]
-    num_actions = 7
+    num_actions = 8
     screen_dimensions = [84, 84] * 3
     num_unit_selection_actions = 1
 
@@ -254,6 +254,7 @@ class TrainMarines(RoachesEnvironmentInterface):
             pysc2_actions.FUNCTIONS.Train_Marine_quick.id,
             pysc2_actions.FUNCTIONS.select_rect.id,
             pysc2_actions.FUNCTIONS.no_op.id,
+            pysc2_actions.FUNCTIONS.Train_SCV_quick.id
         ]
         for i, action in enumerate(actions):
             if action not in timestep.observation.available_actions:
@@ -279,7 +280,8 @@ class TrainMarines(RoachesEnvironmentInterface):
             cls._make_generator([pysc2_actions.FUNCTIONS.select_idle_worker('select')]),
             cls._make_generator([pysc2_actions.FUNCTIONS.Train_Marine_quick('now')]),
             cls._make_generator([pysc2_actions.FUNCTIONS.select_rect('select', [0, 0], [83, 83])]),
-            cls._make_generator([pysc2_actions.FUNCTIONS.no_op()])
+            cls._make_generator([pysc2_actions.FUNCTIONS.no_op()]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.Train_SCV_quick('now')])
         ]
         return actions[action_index]
 

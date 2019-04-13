@@ -27,5 +27,7 @@ for i in range(len(rewards) - smooth_n):
 
 print("Best average:", np.max(smoothed_rewards + [0]))
 print("Current average:", ([0] + smoothed_rewards)[-1])
+print("Num episodes:", len(rewards) + smooth_n)
+
 plt.plot(smoothed_rewards)
 plt.savefig(os.path.join(save_path, 'reward-plot.png'))

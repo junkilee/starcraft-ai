@@ -2,11 +2,12 @@
 
 python -m sc2ai.run_agent \
 --map BuildMarines \
---save_name build-marines1 \
+--save_name build-marines4 \
 --load_model \
 --norender \
---step_mul 8 \
+--step_mul 24 \
 --parallel 2 \
---gamma 0.97 \
---td_lambda 0.97 \
---learning_rate 0.0003 \
+--save_replay_episodes 0 \
+--gamma 0.99 \
+--td_lambda 0.99 \
+--learning_rate 0.0001 \
