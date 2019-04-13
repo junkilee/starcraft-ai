@@ -81,7 +81,7 @@ def main(unused_argv):
         'game_steps_per_episode': FLAGS.game_steps_per_episode,
         'disable_fog': FLAGS.disable_fog,
         'visualize': FLAGS.render,
-        'save_replay_episodes': FLAGS.save_replay_episode,
+        'save_replay_episodes': FLAGS.save_replay_episodes,
         'replay_dir': os.path.join(save_dir, 'replays')
     }
 
