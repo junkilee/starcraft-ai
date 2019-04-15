@@ -236,7 +236,7 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
 
 class TrainMarines(RoachesEnvironmentInterface):
     state_shape = [3, 84, 84]
-    num_actions = 8
+    num_actions = 9
     screen_dimensions = [84, 84] * 3
     num_unit_selection_actions = 1
 
