@@ -1,7 +1,8 @@
 from absl import app
 from absl import flags
 import os
-import pathlib
+
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 from pysc2.env import sc2_env
 from pysc2.lib import point_flag
@@ -12,6 +13,9 @@ from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
 from sc2ai.tflearner.gltl_agent import GLTLLSTMAgent
 from sc2ai.tflearner.tflearner import ActorCriticLearner
 from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
+from sc2ai.runner import AgentRunner
+
+# ------------------------ DEFINE FLAGS ------------------------
 
 if __name__ == '__main__':
     FLAGS = flags.FLAGS
@@ -32,7 +36,7 @@ if __name__ == '__main__':
 
     flags.DEFINE_integer("max_agent_steps", 0, "Total agent steps.")
     flags.DEFINE_integer("game_steps_per_episode", None, "Game steps per episode.")
-    flags.DEFINE_integer("max_episodes", 0, "Total episodes.")
+    flags.DEFINE_integer("max_episodes", 10000, "Total episodes.")
     flags.DEFINE_integer("step_mul", 8, "Game steps per agent step.")
 
     flags.DEFINE_enum("agent_race", "random", sc2_env.Race._member_names_,  # pylint: disable=protected-access
@@ -52,6 +56,19 @@ if __name__ == '__main__':
     flags.mark_flag_as_required("map")
 
 
+def log_run_config(save_dir):
+    # Log all flags to {save_dir}/info.txt
+    print(save_dir)
+    os.makedirs(save_dir, exist_ok=True)
+    run_info_path = os.path.join(save_dir, 'info.txt')
+
+    with open(run_info_path, 'a') as f:
+        for key in FLAGS.__flags:
+            f.write("%s, %s\n" % (key, FLAGS.__flags[key]._value))
+        f.write('\n\n\n')
+
+# ------------------------ DEFINE CUSTOM MAPS ------------------------
+
 class StalkersVsRoachesMap(lib.Map):
     directory = "mini_games"
     download = "https://github.com/deepmind/pysc2#get-the-maps"
@@ -60,12 +77,27 @@ class StalkersVsRoachesMap(lib.Map):
     game_steps_per_episode = 0
     step_mul = 8
 
+# name = 'StalkersVsRoaches'
+# globals()[name] = type(name, (StalkersVsRoachesMap,), dict(filename=name))
+
+# ------------------------ MAIN ------------------------
 
 def main(unused_argv):
-    name = 'StalkersVsRoaches'
-    globals()[name] = type(name, (StalkersVsRoachesMap,), dict(filename=name))
 
     save_dir = os.path.join('saves', FLAGS.save_name)
+
+    runner_params = {
+        'save_dir': save_dir,
+        'num_parallel_instances': 1 if FLAGS.render else FLAGS.parallel
+    }
+
+    model_params = {
+        'load_model': FLAGS.load_model,
+        'gamma': FLAGS.gamma,
+        'td_lambda': FLAGS.td_lambda,
+        'learning_rate': FLAGS.learning_rate,
+        'save_every': 2
+    }
 
     env_kwargs = {
         'map_name': FLAGS.map,
@@ -85,51 +117,14 @@ def main(unused_argv):
         'replay_dir': os.path.join(save_dir, 'replays')
     }
 
-    if FLAGS.map in {'DefeatRoaches', 'StalkersVsRoaches'}:
-        interface = interfaces.EmbeddingInterfaceWrapper(interfaces.RoachesEnvironmentInterface())
-    elif FLAGS.map == 'MoveToBeacon':
-        interface = interfaces.EmbeddingInterfaceWrapper(interfaces.BeaconEnvironmentInterface())
-    elif FLAGS.map == 'DefeatZerglingsAndBanelings':
-        interface = interfaces.BanelingsEnvironmentInterface()
-    elif FLAGS.map == 'BuildMarines':
-        interface = interfaces.EmbeddingInterfaceWrapper(interfaces.TrainMarines())
-    else:
-        raise Exception('Unsupported Map')
+    # Log the configuration for this run
+    log_run_config(save_dir)
 
-    pathlib.Path(save_dir).mkdir(parents=True, exist_ok=True)
-    run_info_path = os.path.join(save_dir, 'info.txt')
-    with open(run_info_path, 'a') as f:
-        for key in FLAGS.__flags:
-            f.write("%s, %s\n" % (key, FLAGS.__flags[key]._value))
-        f.write('\n\n\n')
+    # Build Runner
+    runner = AgentRunner(FLAGS.map, runner_params, model_params, env_kwargs)
 
-    i = 0
-    # Refresh environment every once in a while to deal with memory leak
-    load_model = FLAGS.load_model
-    while True:
-        num_instances = 1 if FLAGS.render else FLAGS.parallel
-        environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
-                                          num_instance=num_instances)
-        agent = GLTLLSTMAgent(interface)
-        learner = ActorCriticLearner(environment, agent,
-                                     save_dir=save_dir,
-                                     load_model=load_model,
-                                     gamma=FLAGS.gamma,
-                                     td_lambda=FLAGS.td_lambda,
-                                     learning_rate=FLAGS.learning_rate)
-
-        try:
-            for i in range(1000):
-                if FLAGS.max_episodes and i >= FLAGS.max_episodes:
-                    break
-                learner.train_episode()
-                i += 1
-        finally:
-            environment.close()
-
-        if FLAGS.max_episodes and i >= FLAGS.max_episodes:
-            break
-        load_model = True
+    # Train the agent
+    runner.train_agent(FLAGS.max_episodes)
 
 
 if __name__ == "__main__":
