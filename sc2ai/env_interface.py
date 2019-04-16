@@ -1,5 +1,6 @@
 from enum import Enum
 
+import itertools
 import numpy as np
 from pysc2.lib import actions as pysc2_actions
 from pysc2.lib import static_data
@@ -346,7 +347,25 @@ class BanelingsEnvironmentInterface(RoachesEnvironmentInterface):
 class BeaconEnvironmentInterface(EnvironmentInterface):
     state_shape = [2, 84, 84]
     screen_dimensions = [84, 84]
-    num_actions = 2
+
+    actions = {
+        ParamType.SPATIAL : [
+            (pysc2_actions.FUNCTIONS.Attack_screen, 'now')],
+        ParamType.SELECT_UNIT : [],
+        ParamType.NO_PARAMS : [
+            (pysc2_actions.FUNCTIONS.select_army, 'select')]
+    }
+
+    @classmethod
+    
+
+    @classmethod
+    def num_actions(cls):
+        return len(cls._get_all_actions())
+
+    @classmethod
+    def _get_all_actions(cls):
+        return list(itertools.chain(*cls.actions.values()))
 
     @classmethod
     def _get_action_mask(cls, timestep):
@@ -357,6 +376,7 @@ class BeaconEnvironmentInterface(EnvironmentInterface):
 
     @classmethod
     def convert_action(cls, action):
+        print(cls.actions)
         action_index, coords, _, _ = action.as_tuple()
         coords = coords if coords is not None else (9, 14)
         actions = [
