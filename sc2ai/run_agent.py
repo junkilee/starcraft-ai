@@ -7,7 +7,7 @@ from pysc2.env import sc2_env
 from pysc2.lib import point_flag
 from pysc2.maps import lib
 
-import sc2ai.agent_interface as interfaces
+import sc2ai.env_interface as interfaces
 from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
 from sc2ai.tflearner.tflearner import ActorCriticLearner
 from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
@@ -120,8 +120,8 @@ def build_agent_interface(map_name):
 
 class Runner:
 
-    def __init__(self, agent_interface):
-        self.agent_interface  = create_agent_interface(FLAGS.map) # We never re-initialize the interface
+    def __init__(self):
+        self.agent_interface = build_agent_interface(FLAGS.map) # We never re-initialize the interface
         self.initialize()
 
     def initialize(self, reset=False):
@@ -151,7 +151,7 @@ class Runner:
 
         while self.episode_count < num_training_episodes:
 
-            if self._should_reset()
+            if self._should_reset():
                 self._reset()
 
             self._train_episode()
@@ -189,7 +189,7 @@ def main(unused_argv):
     log_run_config()
 
     # Build Runner
-    runner = Runner(environment, agent_interface, agent, learner)
+    runner = Runner()
 
     # Train the agent
     runner.train_agent(FLAGS.max_episodes)
