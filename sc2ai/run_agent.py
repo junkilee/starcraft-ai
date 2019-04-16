@@ -118,28 +118,33 @@ def build_agent_interface(map_name):
 
 # ------------------------ RUNNER CLASS ------------------------
 
-class Runner:
+class AgentRunner:
+    # this class should not rely at all on the global FLAGS
 
-    def __init__(self):
-        self.agent_interface = build_agent_interface(FLAGS.map) # We never re-initialize the interface
+    def __init__(self, sc2map, hyperparams):
+        self.hyperparams = hyperparams
+        self.sc2map = sc2map
+
         self.initialize()
 
     def initialize(self, reset=False):
-        # Initializes env, agent and learner. On reset we load the model
+        # Initializes interface, env, agent and learner. On reset we load the model
+        self.agent_interface = build_agent_interface(self.sc2map)
+
         self.environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(self.agent_interface, build_env_kwargs()),
                                           num_instance=_num_parallel_instances())
         
         self.agent = LSTMAgent(self.agent_interface)
 
         # On resets, always load the model
-        load_model = True if reset else FLAGS.load_model
+        load_model = True if reset else self.hyperparams['load_model']
 
         self.learner = ActorCriticLearner(self.environment, self.agent,
                                      save_dir=_save_dir(),
                                      load_model=load_model,
-                                     gamma=FLAGS.gamma,
-                                     td_lambda=FLAGS.td_lambda,
-                                     learning_rate=FLAGS.learning_rate)
+                                     gamma=self.hyperparams['gamma'],
+                                     td_lambda=self.hyperparams['td_lambda'],
+                                     learning_rate=self.hyperparams['learning_rate'])
 
     
     def train_agent(self, num_training_episodes, reset_env_every=1000):
@@ -194,8 +199,15 @@ def main(unused_argv):
     # Log the configuration for this run
     log_run_config()
 
+    hyperparameters = {
+        'load_model': FLAGS.load_model,
+        'gamma': FLAGS.gamma,
+        'td_lambda': FLAGS.td_lambda,
+        'learning_rate': FLAGS.learning_rate
+    }
+
     # Build Runner
-    runner = Runner()
+    runner = AgentRunner(sc2map=FLAGS.map, hyperparams=hyperparameters)
 
     # Train the agent
     runner.train_agent(FLAGS.max_episodes)
