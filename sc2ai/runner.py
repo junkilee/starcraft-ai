@@ -110,7 +110,6 @@ class AgentRunner:
         memory = None
 
         while not all(dones):
-            # CONVERT state SC2 -> Agent, GIVE state to agent, CONVERT action Agent -> SC2
             agent_states, agent_masks = self.agent_interface.convert_states(env_states)
             agent_actions, memory = self.agent.step(agent_states, agent_masks, memory)
             env_action_lists = self.agent_interface.convert_actions(agent_actions)

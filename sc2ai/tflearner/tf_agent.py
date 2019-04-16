@@ -90,8 +90,7 @@ class InterfaceAgent(ActorCriticAgent, ABC):
             self.mask_input: np.array(masks),
         }
         if actions is not None:
-            print(actions)
-            nonspatial, spacial = zip(*actions)
+            nonspatial, spacial, _, _ = zip(*[a.as_tuple() for a in actions])
             spacial = [(13, 27) if spacial is None else spacial for spacial in spacial]
             feed_dict[self.action_input] = np.array(nonspatial)
             feed_dict[self.spacial_input] = np.array(spacial)
@@ -272,7 +271,7 @@ class LSTMAgent(InterfaceAgent):
             feed_dict[self.state_input] = screens
 
         if actions is not None:
-            nonspatial, spacials, selection_coords, selection_indices = zip(*actions)
+            nonspatial, spacials, selection_coords, selection_indices = zip(*[a.as_tuple() for a in actions])
             spacials = [(13, 27) if spacial is None else spacial for spacial in spacials]
             selections = [-1 if selection is None else selection for selection in selection_indices]
             feed_dict[self.action_input] = np.array(nonspatial)

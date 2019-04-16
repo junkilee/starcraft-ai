@@ -207,7 +207,7 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
 
     @classmethod
     def convert_action(cls, action):
-        action_index, coords, selection_coords = action.as_tuple()
+        action_index, coords, selection_coords, _ = action.as_tuple()
         coords = coords if coords is not None else (-1, -1)
         selection_coords = selection_coords if selection_coords is not None else (-1, -1)
         selection_coords = np.clip(selection_coords, a_min=0, a_max=83)
@@ -324,7 +324,7 @@ class BanelingsEnvironmentInterface(RoachesEnvironmentInterface):
 
     @classmethod
     def convert_action(cls, action):
-        action_index, coords, _ = action.as_tuple()
+        action_index, coords, _, _ = action.as_tuple()
         coords = coords if coords is not None else (9, 14)
         actions = [
             [pysc2_actions.FUNCTIONS.Attack_screen('now', coords)],
@@ -357,7 +357,7 @@ class BeaconEnvironmentInterface(EnvironmentInterface):
 
     @classmethod
     def convert_action(cls, action):
-        action_index, coords, _ = action.as_tuple()
+        action_index, coords, _, _ = action.as_tuple()
         coords = coords if coords is not None else (9, 14)
         actions = [
             [pysc2_actions.FUNCTIONS.Attack_screen('now', coords)],
