@@ -33,7 +33,7 @@ if __name__ == '__main__':
 
     flags.DEFINE_integer("max_agent_steps", 0, "Total agent steps.")
     flags.DEFINE_integer("game_steps_per_episode", None, "Game steps per episode.")
-    flags.DEFINE_integer("max_episodes", 0, "Total episodes.")
+    flags.DEFINE_integer("max_episodes", 10000, "Total episodes.")
     flags.DEFINE_integer("step_mul", 8, "Game steps per agent step.")
 
     flags.DEFINE_enum("agent_race", "random", sc2_env.Race._member_names_,  # pylint: disable=protected-access
@@ -148,37 +148,43 @@ class Runner:
 
         self.episode_count = 0
         self.reset_env_every = reset_env_every
-
+    
+        print("Runner: beinning training for", num_training_episodes, "episodes")
         while self.episode_count < num_training_episodes:
 
             if self._should_reset():
+                print("Runner: Decided to reset")
                 self._reset()
 
             self._train_episode()
-                
+        
+        print("Runner: training fininshed, trained", self.episode_count, "episodes")
         self._close_env()
 
 
     def _should_reset(self):
         # Based on episode count only, not crashes
-        return self.episode_count % reset_env_every == 0 and self.episode_count > 0
+        return self.episode_count % self.reset_env_every == 0 and self.episode_count > 0
 
 
     def _train_episode(self):
         try:
             self.learner.train_episode()
         except:
+            print("Runner: Encountered error in train_episode")
             self._reset()
 
     
     def _reset(self):
         # Shutdown env and reinitialize everything
-        self.close_env()
+        print("Runner: Resetting")
+        self._close_env()
         self.initialize(reset=True)
 
     
     def _close_env(self):
         # Tell env to shutdown
+        print("Runner: Shutting down environment")
         self.environment.close()
 
 
