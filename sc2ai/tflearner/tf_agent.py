@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import tensorflow as tf
 import numpy as np
 
-from sc2ai.env_interface import ParamType
+from sc2ai.env_interface import ParamType, AgentAction
 from sc2ai.tflearner import util
 from sc2ai.tflearner import parts
 from sc2ai.tflearner.attention import SelfAttention
@@ -29,8 +29,7 @@ class ActorCriticAgent(ABC):
         :param states: Tensor of shape [batch_size, *state_size]
         :return:
             action_indices:
-                A list of indices that represents the chosen action at the state. This can be of any data type
-                and will be passed back into self.get_feed_dict during training.
+                A list of AgentActions. This will be passed back into self.get_feed_dict during training.
             memory:
                 An arbitrary object that will be passed into step at the next timestep.
         """
@@ -91,37 +90,38 @@ class InterfaceAgent(ActorCriticAgent, ABC):
             self.mask_input: np.array(masks),
         }
         if actions is not None:
-            nonspacial, spacial = zip(*actions)
+            print(actions)
+            nonspatial, spacial = zip(*actions)
             spacial = [(13, 27) if spacial is None else spacial for spacial in spacial]
-            feed_dict[self.action_input] = np.array(nonspacial)
+            feed_dict[self.action_input] = np.array(nonspatial)
             feed_dict[self.spacial_input] = np.array(spacial)
         return feed_dict
 
-    def sample_action_index(self, nonspacial_probs, spacial_probs_x, spacial_probs_y):
+    def sample_action_index(self, nonspatial_probs, spacial_probs_x, spacial_probs_y):
         """
-        :return: Generates a list of  action index tuples of type (nonspacial_index, (spacial_x, spacial_y))
+        :return: Generates a list of AgentActions
         """
-        chosen_nonspacials = util.sample_multiple(nonspacial_probs)  # [num_games]
+        chosen_nonspatials = util.sample_multiple(nonspatial_probs)  # [num_games]
         action_indices = []
-        for i, chosen_nonspacial in enumerate(chosen_nonspacials):
-            if chosen_nonspacial < self.num_screen_dims:
-                x = np.random.choice(self.interface.screen_dimensions[chosen_nonspacial],
-                                     p=spacial_probs_x[chosen_nonspacial][i])
-                y = np.random.choice(self.interface.screen_dimensions[chosen_nonspacial],
-                                     p=spacial_probs_y[chosen_nonspacial][i])
-                action_indices.append((chosen_nonspacial, (x, y)))
+        for i, chosen_nonspatial in enumerate(chosen_nonspatials):
+            if chosen_nonspatial < self.num_screen_dims:
+                x = np.random.choice(self.interface.screen_dimensions[chosen_nonspatial],
+                                     p=spacial_probs_x[chosen_nonspatial][i])
+                y = np.random.choice(self.interface.screen_dimensions[chosen_nonspatial],
+                                     p=spacial_probs_y[chosen_nonspatial][i])
+                action_indices.append(AgentAction(chosen_nonspatial, spatial_coords=(x, y)))
             else:
-                action_indices.append((chosen_nonspacial, None))
+                action_indices.append(AgentAction(chosen_nonspatial))
         return action_indices
 
-    def _train_log_probs(self, nonspacial_probs, spacial_probs_x, spacial_probs_y):
-        nonspacial_log_probs = tf.log(util.index(nonspacial_probs, self.action_input) + 0.00000001)
+    def _train_log_probs(self, nonspatial_probs, spacial_probs_x, spacial_probs_y):
+        nonspatial_log_probs = tf.log(util.index(nonspatial_probs, self.action_input) + 0.00000001)
 
         # TODO: This only works if all screen dimensions are the same. Should pad to greatest length
         probs_y = self._get_chosen_spacial_prob(spacial_probs_y, self.spacial_input[:, 1])
         probs_x = self._get_chosen_spacial_prob(spacial_probs_x, self.spacial_input[:, 0])
         spacial_log_probs = tf.log(probs_x + 0.0000001) + tf.log(probs_y + 0.0000001)
-        result = nonspacial_log_probs + tf.where(self.action_input < self.num_screen_dims,
+        result = nonspatial_log_probs + tf.where(self.action_input < self.num_screen_dims,
                                                  x=spacial_log_probs,
                                                  y=tf.zeros_like(spacial_log_probs))
         return result
@@ -132,10 +132,10 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         return util.index(spacial_probs, self.action_input % tf.convert_to_tensor(self.num_screen_dims))  # [T]
 
     def _probs_from_features(self, features):
-        nonspacial_probs = parts.actor_nonspacial_head(features, self.mask_input, self.num_actions)
+        nonspatial_probs = parts.actor_nonspatial_head(features, self.mask_input, self.num_actions)
         spacial_probs_x, spacial_probs_y = \
             parts.actor_spacial_head(features, self.interface.screen_dimensions)
-        return nonspacial_probs, spacial_probs_x, spacial_probs_y
+        return nonspatial_probs, spacial_probs_x, spacial_probs_y
 
 
 class ConvAgent(InterfaceAgent):
@@ -144,20 +144,20 @@ class ConvAgent(InterfaceAgent):
         self.bootstrap_state_input = tf.placeholder(tf.float32, [*self.interface.state_shape])
 
         self.features = parts.conv_body(self.state_input)
-        self.nonspacial_probs, self.spacial_probs_x, self.spacial_probs_y = self._probs_from_features(self.features)
+        self.nonspatial_probs, self.spacial_probs_x, self.spacial_probs_y = self._probs_from_features(self.features)
 
     def step(self, state, mask, memory):
         probs = self.session.run(
-            [self.nonspacial_probs, *self.spacial_probs_x, *self.spacial_probs_y], {
+            [self.nonspatial_probs, *self.spacial_probs_x, *self.spacial_probs_y], {
                 self.state_input: state,
                 self.mask_input: mask
             })
-        nonspacial_probs = probs[0]
+        nonspatial_probs = probs[0]
         spacial_probs = probs[1:]
         spacial_probs_x = spacial_probs[:self.num_screen_dims]
         spacial_probs_y = spacial_probs[self.num_screen_dims:]  # [num_screen_dims, num_games, screen_dim]
 
-        return self.sample_action_index(nonspacial_probs, spacial_probs_x, spacial_probs_y), None
+        return self.sample_action_index(nonspatial_probs, spacial_probs_x, spacial_probs_y), None
 
     def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
         feed_dict = super(ConvAgent, self).get_feed_dict(states, masks, actions, bootstrap_state)
@@ -167,7 +167,7 @@ class ConvAgent(InterfaceAgent):
         }
 
     def train_log_probs(self):
-        return self._train_log_probs(self.nonspacial_probs, self.spacial_probs_x, self.spacial_probs_y)
+        return self._train_log_probs(self.nonspatial_probs, self.spacial_probs_x, self.spacial_probs_y)
 
     def bootstrap_value(self):
         return tf.squeeze(parts.value_head(parts.conv_body(tf.expand_dims(self.bootstrap_state_input, axis=0))), axis=0)
@@ -199,8 +199,8 @@ class LSTMAgent(InterfaceAgent):
         self.train_output = self._lstm_step_train()
         self.all_values = parts.value_head(self.train_output)
 
-        self.nonspacial_probs, self.spacial_probs_x, self.spacial_probs_y = self._probs_from_features(lstm_output)
-        self.nonspacial_train, self.spacial_train_x, self.spacial_train_y = \
+        self.nonspatial_probs, self.spacial_probs_x, self.spacial_probs_y = self._probs_from_features(lstm_output)
+        self.nonspatial_train, self.spacial_train_x, self.spacial_train_y = \
             self._probs_from_features(self.train_output[:-1])
         self.unit_selection_probs = self._selection_probs_from_features(lstm_output, self.unit_embeddings_input)
         self._f1 = lstm_output
@@ -231,16 +231,16 @@ class LSTMAgent(InterfaceAgent):
             self.memory_input: memory
         }
         results = self.session.run(
-            [self.next_lstm_state, self.nonspacial_probs, self.unit_selection_probs,
+            [self.next_lstm_state, self.nonspatial_probs, self.unit_selection_probs,
              *self.spacial_probs_x, *self.spacial_probs_y], feed_dict)
-        next_lstm_state, nonspacial_probs, selection_probs = results[:3]
+        next_lstm_state, nonspatial_probs, selection_probs = results[:3]
         spacial_probs = results[3:]
 
         spacial_probs_x = spacial_probs[:self.num_screen_dims]
         spacial_probs_y = spacial_probs[self.num_screen_dims:]
 
         unit_coords = util.pad_stack([state['unit_coords'][:, :2] for state in states], pad_axis=0, stack_axis=0)
-        return self.sample_action_index_with_units(nonspacial_probs, spacial_probs_x,
+        return self.sample_action_index_with_units(nonspatial_probs, spacial_probs_x,
                                                    spacial_probs_y, selection_probs, unit_coords), next_lstm_state
 
     def _lstm_step(self):
@@ -272,10 +272,10 @@ class LSTMAgent(InterfaceAgent):
             feed_dict[self.state_input] = screens
 
         if actions is not None:
-            nonspacial, spacials, selection_coords, selection_indices = zip(*actions)
+            nonspatial, spacials, selection_coords, selection_indices = zip(*actions)
             spacials = [(13, 27) if spacial is None else spacial for spacial in spacials]
             selections = [-1 if selection is None else selection for selection in selection_indices]
-            feed_dict[self.action_input] = np.array(nonspacial)
+            feed_dict[self.action_input] = np.array(nonspatial)
             feed_dict[self.spacial_input] = np.array(spacials)
             feed_dict[self.unit_selection_input] = np.array(selections)
         return feed_dict
@@ -287,29 +287,28 @@ class LSTMAgent(InterfaceAgent):
         return self.all_values[:-1]
 
     def train_log_probs(self):
-        return self._train_log_probs_with_units(self.nonspacial_train, self.spacial_train_x, self.spacial_train_y,
+        return self._train_log_probs_with_units(self.nonspatial_train, self.spacial_train_x, self.spacial_train_y,
                                                 self.unit_selection_probs_train)
 
-    def sample_action_index_with_units(self, nonspacial_probs, spacial_probs_x, spacial_probs_y,
+    def sample_action_index_with_units(self, nonspatial_probs, spacial_probs_x, spacial_probs_y,
                                        unit_distribution, unit_coords):
         """
         unit_distribution is an array of shape [num_games, num_select_actions, num_units]
-        :return: Generates an list of action index tuple of type (nonspacial_index, (spacial_x, spacial_y))
+        :return: Generates an list of action index tuple of type (nonspatial_index, (spacial_x, spacial_y))
         """
-        actions = self.sample_action_index(nonspacial_probs, spacial_probs_x, spacial_probs_y)
+        actions = self.sample_action_index(nonspatial_probs, spacial_probs_x, spacial_probs_y)
         num_units = unit_distribution.shape[2]
         new_actions = []
         unit_coords = np.stack(unit_coords)
 
         for i, action in enumerate(actions):
-            nonspacial_index, coords = action
-            param_type, param_index = self.interface.action_parameter_type(nonspacial_index)
+            param_type, param_index = self.interface.action_parameter_type(action.action_type)
             if param_type is ParamType.SELECT_UNIT:
                 unit_choice = np.random.choice(num_units, p=unit_distribution[i, param_index])
-                new_actions.append((nonspacial_index, coords,
-                                    unit_coords[i, unit_choice].astype(np.int32), unit_choice))
+                new_actions.append(AgentAction(action_type=action.action_type,
+                                    unit_selection_coords=unit_coords[i, unit_choice].astype(np.int32)))
             else:
-                new_actions.append((nonspacial_index, coords, None, None))
+                new_actions.append(action)
         return new_actions
 
     def _get_chosen_selection_probs(self, selection_probs, selection_choice):
@@ -324,8 +323,8 @@ class LSTMAgent(InterfaceAgent):
         index = (self.action_input - self.num_screen_dims) % tf.convert_to_tensor(num_selection_actions)
         return util.index(selection_probs, index)  # [T]
 
-    def _train_log_probs_with_units(self, nonspacial_probs, spacial_probs_x, spacial_probs_y, selection_probs):
-        nonspacial_log_probs = tf.log(util.index(nonspacial_probs, self.action_input) + 1e-10)
+    def _train_log_probs_with_units(self, nonspatial_probs, spacial_probs_x, spacial_probs_y, selection_probs):
+        nonspatial_log_probs = tf.log(util.index(nonspatial_probs, self.action_input) + 1e-10)
 
         # TODO: This only works if all screen dimensions are the same. Should pad to greatest length
         probs_y = self._get_chosen_spacial_prob(spacial_probs_y, self.spacial_input[:, 1])
@@ -335,7 +334,7 @@ class LSTMAgent(InterfaceAgent):
         selection_log_prob = tf.log(probs_selection + 1e-10)
         spacial_log_probs = tf.log(probs_x + 1e-10) + tf.log(probs_y + 1e-10)
 
-        result = nonspacial_log_probs
+        result = nonspatial_log_probs
         result = result + tf.where(self.action_input < self.num_screen_dims,
                                    x=spacial_log_probs,
                                    y=tf.zeros_like(spacial_log_probs))

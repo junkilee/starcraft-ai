@@ -82,16 +82,16 @@ def actor_pointer_head(features, embeddings, num_heads):
         return probs / tf.reduce_sum(probs, axis=-1, keepdims=True)
 
 
-def actor_nonspacial_head(features, action_mask, num_actions):
+def actor_nonspatial_head(features, action_mask, num_actions):
     """
-    Feed forward network to produce the nonspacial action probabilities.
+    Feed forward network to produce the nonspatial action probabilities.
 
     :param features: Tensor of shape [batch_size, num_features]
     :param action_mask: Tensor of shape [batch_size, num_actions]
     :param num_actions: number of actions to produce.
     :return: Tensor of shape [batch_size, num_actions] of probability distributions.
     """
-    with tf.variable_scope('actor_nonspacial', reuse=tf.AUTO_REUSE):
+    with tf.variable_scope('actor_nonspatial', reuse=tf.AUTO_REUSE):
         probs = tf.layers.dense(features, units=num_actions, activation=tf.nn.softmax, name='output')
     masked = (probs + 1e-10) * action_mask
     return masked / tf.reduce_sum(masked, axis=1, keepdims=True)

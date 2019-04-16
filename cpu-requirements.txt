@@ -1,4 +1,4 @@
 pysc2
 trfl
-tensorflow==1.12
-tensorflow-probability==0.5
+tensorflow==1.13.1
+tensorflow-probability==0.6

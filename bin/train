@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 
-python -m sc2ai.run_agent \
+python -m sc2ai.train \
 --map BuildMarines \
 --save_name build-marines1 \
 --load_model \
---norender \
 --step_mul 8 \
 --parallel 2 \
 --gamma 0.97 \
