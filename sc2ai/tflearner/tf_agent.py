@@ -60,14 +60,15 @@ class ActorCriticAgent(ABC):
         pass
 
     @abstractmethod
-    def get_feed_dict(self, states, masks, actions, bootstrap_state):
+    def get_feed_dict(self, states, memory, masks, actions, bootstrap_state):
         """
         Get the feed dict with values for all placeholders that are dependenceies for the tensors
         `bootstrap_value`, `train_values`, and `train_log_probs`.
 
+        :param states: Arbitrary object representing the state, passed to the agent during training and inferenc.e
+        :param memory: Arbitrary object. Memory is created by the agent and is used to augments the state.
         :param bootstrap_state: A numpy a array of shape [*state_shape] representing the terminal state.
         :param masks: A numpy array of shape [T, num_actions].
-        :param states: A numpy array of shape [T, *state_shape].
         :param actions: A list of action indices with length T.
         :return: The feed dict required to evaluate `train_values` and `train_log_probs`
         """
@@ -85,7 +86,7 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         self.action_input = tf.placeholder(tf.int32, [None])  # [T]
         self.spacial_input = tf.placeholder(tf.int32, [None, 2])  # [T, 2]   dimension size 2 for x and y
 
-    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
+    def get_feed_dict(self, states, memory, masks, actions=None, bootstrap_state=None):
         feed_dict = {
             self.state_input: np.array(states),
             self.mask_input: np.array(masks),
@@ -159,7 +160,7 @@ class ConvAgent(InterfaceAgent):
 
         return self.sample_action_index(nonspacial_probs, spacial_probs_x, spacial_probs_y), None
 
-    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
+    def get_feed_dict(self, states, memory, masks, actions=None, bootstrap_state=None):
         feed_dict = super(ConvAgent, self).get_feed_dict(states, masks, actions, bootstrap_state)
         return {
             self.bootstrap_state_input: np.array(bootstrap_state),

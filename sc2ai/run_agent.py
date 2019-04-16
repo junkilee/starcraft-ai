@@ -9,6 +9,7 @@ from pysc2.maps import lib
 
 import sc2ai.env_interface as interfaces
 from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
+from sc2ai.tflearner.gltl_agent import GLTLLSTMAgent
 from sc2ai.tflearner.tflearner import ActorCriticLearner
 from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
 
@@ -109,7 +110,7 @@ def main(unused_argv):
         num_instances = 1 if FLAGS.render else FLAGS.parallel
         environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
                                           num_instance=num_instances)
-        agent = LSTMAgent(interface)
+        agent = GLTLLSTMAgent(interface)
         learner = ActorCriticLearner(environment, agent,
                                      save_dir=save_dir,
                                      load_model=load_model,

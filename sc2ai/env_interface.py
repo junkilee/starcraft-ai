@@ -70,12 +70,13 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
 
     def __init__(self, interface):
         self.interface = interface
-        self.unit_embedding_size = len(self._get_embedding_columns()) + len(static_data.UNIT_TYPES)
+        self.unit_embedding_size = len(self._get_embedding_columns()) + len(static_data.UNIT_TYPES) + 1
 
         self.state_shape = self.interface.state_shape
         self.screen_dimensions = self.interface.screen_dimensions
         self.num_actions = self.interface.num_actions
         self.num_unit_selection_actions = self.interface.num_unit_selection_actions
+        self.num_gltl_states = self.interface.num_gltl_states
 
     def convert_action(self, action):
         return self.interface.convert_action(action)
@@ -87,19 +88,19 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
             FeatureUnit.y,
         ])
         return {
-            "screen": state,
-            "unit_embeddings": self._get_unit_embeddings(timestep, self._get_embedding_columns()),
-            "unit_coords": self._get_unit_embeddings(timestep, coord_columns)
-        }, self._augment_mask(timestep, action_mask)
+                   "screen": state,
+                   "unit_embeddings": self._get_unit_embeddings(timestep, self._get_embedding_columns()),
+                   "unit_coords": self._get_unit_embeddings(timestep, coord_columns)
+               }, self._augment_mask(timestep, action_mask)
 
     def dummy_state(self):
         num_units = 0
         state, action_mask = self.interface.dummy_state()
         return {
-            "screen": state,
-            "unit_embeddings": np.zeros((num_units, self.unit_embedding_size)),
-            "unit_coords": np.zeros((num_units, 2 + len(static_data.UNIT_TYPES)))
-        }, action_mask
+                   "screen": state,
+                   "unit_embeddings": np.zeros((num_units, self.unit_embedding_size)),
+                   "unit_coords": np.zeros((num_units, 2 + len(static_data.UNIT_TYPES)))
+               }, action_mask
 
     @staticmethod
     def _get_embedding_columns():
@@ -119,15 +120,18 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
             return np.zeros((1, self.unit_embedding_size))
         adjusted_info = unit_info[:, np.array(useful_columns)]
 
-        num_unit_types = len(static_data.UNIT_TYPES)
+        num_unit_types = len(static_data.UNIT_TYPES) + 1  # id 0 reserved for for unknown type
         blizzard_unit_type = unit_info[:, FeatureUnit.unit_type]
-        pysc2_unit_type = [static_data.UNIT_TYPES.index(t) for t in blizzard_unit_type]
+
+        # TODO: Check why id 317 is coming up in MoveToBeacon but not a valid id
+        pysc2_unit_type = [static_data.UNIT_TYPES.index(t) + 1 if t in static_data.UNIT_TYPES
+                           else 0 for t in blizzard_unit_type]
         one_hot_unit_types = np.eye(num_unit_types)[pysc2_unit_type]
 
         unit_vector = np.concatenate([adjusted_info, one_hot_unit_types], axis=-1)
         return unit_vector
 
-    def at_beacon(self,timestep):
+    def at_beacon(self, timestep):
         """
         TODO: Check if a unit is at the beacon using x and y coordinates from timestep
         """
@@ -349,22 +353,32 @@ class BanelingsEnvironmentInterface(RoachesEnvironmentInterface):
 
 class BeaconEnvironmentInterface(EnvironmentInterface):
     state_shape = [2, 84, 84]
-    screen_dimensions = [84, 84]
     num_actions = 2
+    screen_dimensions = [84, 84] * 1
+    num_unit_selection_actions = 0
+    num_gltl_states = 5
 
     @classmethod
     def _get_action_mask(cls, timestep):
         mask = np.ones([cls.num_actions])
-        if pysc2_actions.FUNCTIONS.Attack_screen.id not in timestep.observation.available_actions:
-            mask[0] = 0
+        actions = [
+            pysc2_actions.FUNCTIONS.Move_screen.id,
+            pysc2_actions.FUNCTIONS.select_army.id,
+        ]
+        for i, action in enumerate(actions):
+            if action not in timestep.observation.available_actions:
+                mask[i] = 0
         return mask
 
     @classmethod
     def convert_action(cls, action):
-        action_index, coords = action
-        coords = coords if coords is not None else (9, 14)
+        action_index, coords, selection_coords, selection_index = action
+        coords = coords if coords is not None else (-1, -1)
+        selection_coords = selection_coords if selection_coords is not None else (-1, -1)
+        selection_coords = np.clip(selection_coords, a_min=0, a_max=83)
+
         actions = [
-            cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', coords)]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.Move_screen('now', coords)]),
             cls._make_generator([pysc2_actions.FUNCTIONS.select_army('select')])
         ]
         return actions[action_index]
@@ -374,11 +388,11 @@ class BeaconEnvironmentInterface(EnvironmentInterface):
         player_relative = timestep.observation.feature_screen.player_relative
         beacon = (np.array(player_relative) == 3).astype(np.float32)
         player = (np.array(player_relative) == 1).astype(np.float32)
-        #TODO: Include list of true/false values for propositions
+        # TODO: Include list of true/false values for propositions
         return np.stack([beacon, player], axis=0), cls._get_action_mask(timestep)
 
     @classmethod
-    def convert_reward(self,timestep,action):
+    def convert_reward(self, timestep, action):
         """
         TODO: Convert timestep and action into reward to be used by GLTL
         """
