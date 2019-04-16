@@ -7,10 +7,12 @@ from pysc2.env import sc2_env
 from pysc2.lib import point_flag
 from pysc2.maps import lib
 
-import sc2ai.env_interface as interfaces
+import sc2ai.agent_interface as interfaces
 from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
 from sc2ai.tflearner.tflearner import ActorCriticLearner
 from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
+
+# ------------------------ DEFINE FLAGS ------------------------
 
 if __name__ == '__main__':
     FLAGS = flags.FLAGS
@@ -50,6 +52,18 @@ if __name__ == '__main__':
 
     flags.mark_flag_as_required("map")
 
+def log_run_config():
+    # Log all flags to {save_dir}/info.txt
+
+    pathlib.Path(_save_dir()).mkdir(parents=True, exist_ok=True)
+    run_info_path = os.path.join(_save_dir(), 'info.txt')
+
+    with open(run_info_path, 'a') as f:
+        for key in FLAGS.__flags:
+            f.write("%s, %s\n" % (key, FLAGS.__flags[key]._value))
+        f.write('\n\n\n')
+
+# ------------------------ DEFINE CUSTOM MAPS ------------------------
 
 class StalkersVsRoachesMap(lib.Map):
     directory = "mini_games"
@@ -59,14 +73,20 @@ class StalkersVsRoachesMap(lib.Map):
     game_steps_per_episode = 0
     step_mul = 8
 
+# name = 'StalkersVsRoaches'
+# globals()[name] = type(name, (StalkersVsRoachesMap,), dict(filename=name))
 
-def main(unused_argv):
-    name = 'StalkersVsRoaches'
-    globals()[name] = type(name, (StalkersVsRoachesMap,), dict(filename=name))
+# ------------------------ GET FLAGS ------------------------
+def _save_dir():
+    return os.path.join('saves', FLAGS.save_name)
 
-    save_dir = os.path.join('saves', FLAGS.save_name)
+def _num_parallel_instances():
+    return 1 if FLAGS.render else FLAGS.parallel
 
-    env_kwargs = {
+# ------------------------ FACTORIES ------------------------
+
+def build_env_kwargs():
+    return {
         'map_name': FLAGS.map,
         'players': [sc2_env.Agent(sc2_env.Race[FLAGS.agent_race])],
         'agent_interface_format': sc2_env.parse_agent_interface_format(
@@ -81,54 +101,98 @@ def main(unused_argv):
         'disable_fog': FLAGS.disable_fog,
         'visualize': FLAGS.render,
         'save_replay_episodes': 200,
-        'replay_dir': os.path.join(save_dir, 'replays')
+        'replay_dir': os.path.join(_save_dir(), 'replays')
     }
 
-    if FLAGS.map in {'DefeatRoaches', 'StalkersVsRoaches'}:
-        interface = interfaces.EmbeddingInterfaceWrapper(interfaces.RoachesEnvironmentInterface())
-    elif FLAGS.map == 'MoveToBeacon':
-        interface = interfaces.EmbeddingInterfaceWrapper(interfaces.BeaconEnvironmentInterface())
-    elif FLAGS.map == 'DefeatZerglingsAndBanelings':
-        interface = interfaces.BanelingsEnvironmentInterface()
-    elif FLAGS.map == 'BuildMarines':
-        interface = interfaces.EmbeddingInterfaceWrapper(interfaces.TrainMarines())
+def build_agent_interface(map_name):
+    if map_name in {'DefeatRoaches', 'StalkersVsRoaches'}:
+        return interfaces.EmbeddingInterfaceWrapper(interfaces.RoachesEnvironmentInterface())
+    elif map_name == 'MoveToBeacon':
+        return interfaces.EmbeddingInterfaceWrapper(interfaces.BeaconEnvironmentInterface())
+    elif map_name == 'DefeatZerglingsAndBanelings':
+        return interfaces.BanelingsEnvironmentInterface()
+    elif map_name == 'BuildMarines':
+        return interfaces.EmbeddingInterfaceWrapper(interfaces.TrainMarines())
     else:
         raise Exception('Unsupported Map')
 
-    pathlib.Path(save_dir).mkdir(parents=True, exist_ok=True)
-    run_info_path = os.path.join(save_dir, 'info.txt')
-    with open(run_info_path, 'a') as f:
-        for key in FLAGS.__flags:
-            f.write("%s, %s\n" % (key, FLAGS.__flags[key]._value))
-        f.write('\n\n\n')
+# ------------------------ RUNNER CLASS ------------------------
 
-    i = 0
-    # Refresh environment every once in a while to deal with memory leak
-    load_model = FLAGS.load_model
-    while True:
-        num_instances = 1 if FLAGS.render else FLAGS.parallel
-        environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
-                                          num_instance=num_instances)
-        agent = LSTMAgent(interface)
-        learner = ActorCriticLearner(environment, agent,
-                                     save_dir=save_dir,
+class Runner:
+
+    def __init__(self, agent_interface):
+        self.agent_interface  = create_agent_interface(FLAGS.map) # We never re-initialize the interface
+        self.initialize()
+
+    def initialize(self, reset=False):
+        # Initializes env, agent and learner. On reset we load the model
+        self.environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(self.agent_interface, build_env_kwargs()),
+                                          num_instance=_num_parallel_instances())
+        
+        self.agent = LSTMAgent(self.agent_interface)
+
+        # On resets, always load the model
+        load_model = True if reset else FLAGS.load_model
+
+        self.learner = ActorCriticLearner(self.environment, self.agent,
+                                     save_dir=_save_dir(),
                                      load_model=load_model,
                                      gamma=FLAGS.gamma,
                                      td_lambda=FLAGS.td_lambda,
                                      learning_rate=FLAGS.learning_rate)
 
-        try:
-            for i in range(1000):
-                if FLAGS.max_episodes and i >= FLAGS.max_episodes:
-                    break
-                learner.train_episode()
-                i += 1
-        finally:
-            environment.close()
+    
+    def train_agent(self, num_training_episodes, reset_env_every=1000):
+        # Trains the agent for num_training_episodes
+        # Resets the environment every once in a while (to deal with memory leak)
 
-        if FLAGS.max_episodes and i >= FLAGS.max_episodes:
-            break
-        load_model = True
+        self.episode_count = 0
+        self.reset_env_every = reset_env_every
+
+        while self.episode_count < num_training_episodes:
+
+            if self._should_reset()
+                self._reset()
+
+            self._train_episode()
+                
+        self._close_env()
+
+
+    def _should_reset(self):
+        # Based on episode count only, not crashes
+        return self.episode_count % reset_env_every == 0 and self.episode_count > 0
+
+
+    def _train_episode(self):
+        try:
+            self.learner.train_episode()
+        except:
+            self._reset()
+
+    
+    def _reset(self):
+        # Shutdown env and reinitialize everything
+        self.close_env()
+        self.initialize(reset=True)
+
+    
+    def _close_env(self):
+        # Tell env to shutdown
+        self.environment.close()
+
+
+# ------------------------ MAIN ------------------------
+
+def main(unused_argv):
+    # Log the configuration for this run
+    log_run_config()
+
+    # Build Runner
+    runner = Runner(environment, agent_interface, agent, learner)
+
+    # Train the agent
+    runner.train_agent(FLAGS.max_episodes)
 
 
 if __name__ == "__main__":
