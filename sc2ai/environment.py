@@ -2,51 +2,48 @@ from pysc2.env import sc2_env
 from multiprocessing import Pipe, Process
 from pysc2.env.environment import StepType
 import numpy as np
-import time
 
 
 class SCEnvironmentWrapper:
-    def __init__(self, agent_interface, env_kwargs):
+    def __init__(self, interface, env_kwargs):
         self.env = sc2_env.SC2Env(**env_kwargs)
         self.render = env_kwargs['visualize']
-        self.agent_interface = agent_interface
+        self.interface = interface
         self.done = False
         self.timestep = None
+        self.num_parallel_instances = 1
 
-    def step(self, action):
+    def step(self, action_list):
         """
-        :param action:
-            The action, represented as a generator of pysc2 action objects, to take in the current
-            state of the environment.
+        :param action_list:
+            List of pysc2 actions.
         :return:
-            state: The state resulting after the action has been taken.
+            env_state: The state resulting after the action has been taken.
+            total_reward: The accumulated reward from the environment
             done: Whether the action resulted in the environment reaching a terminal state.
         """
         if self.done:
-            dummy_state, dummy_mask = self.agent_interface.dummy_state()
+            dummy_state, dummy_mask = self.interface.dummy_state()
             return dummy_state, dummy_mask, np.nan, int(self.done)
 
-        actions = self.agent_interface.convert_action(action)
-        actions.__next__()
-        action = actions.send(self.timestep)
-
         total_reward = 0
-        while True:
+        for action in action_list:
             self.timestep = self.env.step([action])[0]
-            if self.render:
-                time.sleep(0.15)
+            # if self.render:
+            #     time.sleep(0.15)
 
             total_reward += self.timestep.reward
             self.done = int(self.timestep.step_type == StepType.LAST)
-            state, action_mask = self.agent_interface.convert_state(self.timestep)
 
-            action = actions.send(self.timestep)
-            if self.done or action is None:
-                return state, action_mask, total_reward, int(self.done)
+            if self.done:
+                break
+
+        state, action_mask = self.interface.convert_state(self.timestep)
+        return state, action_mask, total_reward, int(self.done)
 
     def reset(self):
         timestep = self.env.reset()[0]
-        state, action_mask = self.agent_interface.convert_state(timestep)
+        state, action_mask = self.interface.convert_state(timestep)
         self.timestep = timestep
         self.done = False
         return state, action_mask,  0, int(self.done)
@@ -73,11 +70,11 @@ def run_process(env_factory, pipe):
 
 
 class MultipleEnvironment:
-    def __init__(self, env_factory, num_instance=1):
+    def __init__(self, env_factory, num_parallel_instances=1):
         self.pipes = []
         self.processes = []
-        self.num_instances = num_instance
-        for process_id in range(num_instance):
+        self.num_parallel_instances = num_parallel_instances
+        for process_id in range(num_parallel_instances):
             parent_conn, child_conn = Pipe()
             self.pipes.append(parent_conn)
             p = Process(target=run_process, args=(env_factory, child_conn,))
@@ -95,6 +92,7 @@ class MultipleEnvironment:
         return self.get_results()
 
     def get_results(self):
+        # env_states, rewards, dones = zip(*[pipe.recv() for pipe in self.pipes])
         states, masks, rewards, dones = zip(*[pipe.recv() for pipe in self.pipes])
         return states, np.stack(masks), np.stack(rewards), np.stack(dones)
 

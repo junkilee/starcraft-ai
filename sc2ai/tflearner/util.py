@@ -1,6 +1,24 @@
 import numpy as np
 import tensorflow as tf
 
+from sc2ai.env_interface import AgentAction
+
+
+def sample_action(num_spatial_actions, nonspatial_probs, spatial_probs):
+    """
+    :return: Generates a list of AgentActions
+    """
+    chosen_nonspatials = sample_multiple(nonspatial_probs)  # [num_games]
+    agent_actions = []
+    for i, chosen_nonspatial in enumerate(chosen_nonspatials):
+        if chosen_nonspatial < num_spatial_actions:
+            x = np.random.choice(84, p=spatial_probs[0, i, :, chosen_nonspatial])
+            y = np.random.choice(84, p=spatial_probs[1, i, :, chosen_nonspatial])
+            agent_actions.append(AgentAction(chosen_nonspatial, spatial_coords=(x, y)))
+        else:
+            agent_actions.append(AgentAction(chosen_nonspatial))
+    return agent_actions
+
 
 def pad_stack(arrays, pad_axis, stack_axis):
     """
