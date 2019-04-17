@@ -1,5 +1,4 @@
 from enum import Enum
-
 import numpy as np
 from pysc2.lib import actions as pysc2_actions
 from pysc2.lib import static_data
@@ -7,28 +6,48 @@ from pysc2.lib.features import PlayerRelative, FeatureUnit
 from abc import ABC, abstractmethod
 
 
-class ParamType(Enum):
+class ActionParamType(Enum):
     SPATIAL = 1
     SELECT_UNIT = 2
     NO_PARAMS = 3
 
 
 class AgentAction:
-    def __init__(self, action_type, spatial_coords=None, unit_selection_coords=None, unit_selection_index=None):
-        self.action_type = action_type
+    def __init__(self, index, spatial_coords=None, unit_selection_coords=None, unit_selection_index=None):
+        self.index = index
+        self.unit_selection_index = unit_selection_index
         self.spatial_coords = spatial_coords
         self.unit_selection_coords = unit_selection_coords
-        self.unit_selection_index = unit_selection_index
 
     def as_tuple(self):
-        return self.action_type, self.spatial_coords, self.unit_selection_coords, self.unit_selection_index
+        return self.index, self.spatial_coords, self.unit_selection_coords, self.unit_selection_index
+
+
+class EnvAction:
+    def __init__(self, sc2_function, param_type, fixed_params=()):
+        self.sc2_function = sc2_function
+        self.param_type = param_type
+        self.fixed_params = fixed_params
+
+    def get_id(self):
+        return self.sc2_function.id
+
+    def get_sc2_action(self, action):
+        parameters = []
+        if self.param_type == ActionParamType.SPATIAL:
+            parameters = [action.spatial_coords]
+        elif self.param_type == ActionParamType.SELECT_UNIT:
+            parameters = [action.unit_selection_coords]
+
+        all_params = list(self.fixed_params)
+        for param in parameters:
+            all_params[all_params.index(None)] = param
+
+        return [self.sc2_function(*all_params)]
 
 
 class EnvironmentInterface(ABC):
     state_shape = None
-    screen_dimensions = None
-    num_actions = None
-    num_unit_selection_actions = 0
 
     def convert_states(self, timesteps):
         state_mask_pairs = [self.convert_state(timestep) for timestep in timesteps]
@@ -39,14 +58,8 @@ class EnvironmentInterface(ABC):
     def convert_actions(self, actions):
         return [self.convert_action(action) for action in actions]
 
-    @abstractmethod
     def convert_action(self, action):
-        """
-        Converts an action output from the agent into a pysc2 action.
-        :param action: A tuple of (action_index, coordinates)
-        :return: A list of pysc2 action objects
-        """
-        pass
+        return self.get_actions()[action.index].get_sc2_action(action)
 
     @abstractmethod
     def convert_state(self, timestep):
@@ -56,8 +69,28 @@ class EnvironmentInterface(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_actions(self):
+        pass
+
     def dummy_state(self):
-        return np.ones(self.state_shape), np.ones((self.num_actions,))
+        return np.ones(self.state_shape), np.ones((self.num_actions()))
+
+    def num_spatial_actions(self):
+        return len([action for action in self.get_actions() if action.param_type == ActionParamType.SPATIAL])
+
+    def num_select_unit_actions(self):
+        return len([action for action in self.get_actions() if action.param_type == ActionParamType.SELECT_UNIT])
+
+    def num_actions(self):
+        return len(self.get_actions())
+
+    def _get_action_mask(self, timestep):
+        mask = np.ones([self.num_actions()])
+        for i, action in enumerate(self.get_actions()):
+            if action.get_id() not in timestep.observation.available_actions:
+                mask[i] = 0
+        return mask
 
 
 class EmbeddingInterfaceWrapper(EnvironmentInterface):
@@ -70,16 +103,11 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
 
     def __init__(self, interface):
         self.interface = interface
-        self.unit_embedding_size = len(self._get_embedding_columns()) + len(static_data.UNIT_TYPES) + 1
-
+        self.unit_embedding_size = len(self._get_embedding_columns()) + len(static_data.UNIT_TYPES)
         self.state_shape = self.interface.state_shape
-        self.screen_dimensions = self.interface.screen_dimensions
-        self.num_actions = self.interface.num_actions
-        self.num_unit_selection_actions = self.interface.num_unit_selection_actions
-        self.num_gltl_states = self.interface.num_gltl_states
 
-    def convert_action(self, action):
-        return self.interface.convert_action(action)
+    def get_actions(self):
+        return self.interface.get_actions()
 
     def convert_state(self, timestep):
         state, action_mask = self.interface.convert_state(timestep)
@@ -88,19 +116,19 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
             FeatureUnit.y,
         ])
         return {
-                   "screen": state,
-                   "unit_embeddings": self._get_unit_embeddings(timestep, self._get_embedding_columns()),
-                   "unit_coords": self._get_unit_embeddings(timestep, coord_columns)
-               }, self._augment_mask(timestep, action_mask)
+            "screen": state,
+            "unit_embeddings": self._get_unit_embeddings(timestep, self._get_embedding_columns()),
+            "unit_coords": self._get_unit_embeddings(timestep, coord_columns)
+        }, self._augment_mask(timestep, action_mask)
 
     def dummy_state(self):
         num_units = 0
         state, action_mask = self.interface.dummy_state()
         return {
-                   "screen": state,
-                   "unit_embeddings": np.zeros((num_units, self.unit_embedding_size)),
-                   "unit_coords": np.zeros((num_units, 2 + len(static_data.UNIT_TYPES)))
-               }, action_mask
+            "screen": state,
+            "unit_embeddings": np.zeros((num_units, self.unit_embedding_size)),
+            "unit_coords": np.zeros((num_units, 2 + len(static_data.UNIT_TYPES)))
+        }, action_mask
 
     @staticmethod
     def _get_embedding_columns():
@@ -120,23 +148,15 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
             return np.zeros((1, self.unit_embedding_size))
         adjusted_info = unit_info[:, np.array(useful_columns)]
 
-        num_unit_types = len(static_data.UNIT_TYPES) + 1  # id 0 reserved for for unknown type
+        num_unit_types = len(static_data.UNIT_TYPES)
         blizzard_unit_type = unit_info[:, FeatureUnit.unit_type]
-
-        # TODO: Check why id 317 is coming up in MoveToBeacon but not a valid id
         valid_units = np.array([t in static_data.UNIT_TYPES for t in blizzard_unit_type])
-        pysc2_unit_type = [static_data.UNIT_TYPES.index(t) + 1 if t in static_data.UNIT_TYPES
-                           else 0 for t in blizzard_unit_type]
+
+        pysc2_unit_type = [static_data.UNIT_TYPES.index(t) for t in blizzard_unit_type[valid_units]]
         one_hot_unit_types = np.eye(num_unit_types)[pysc2_unit_type]
 
         unit_vector = np.concatenate([adjusted_info[valid_units], one_hot_unit_types], axis=-1)
         return unit_vector
-
-    def at_beacon(self, timestep):
-        """
-        TODO: Check if a unit is at the beacon using x and y coordinates from timestep
-        """
-        pass
 
     def _augment_mask(self, timestep, mask):
         """
@@ -146,252 +166,65 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
         units_exist = len(embeddings[0]) != 0
 
         if not units_exist:
-            mask[self.num_actions:self.num_actions + self.num_unit_selection_actions] = 0
+            mask[self.interface.num_actions():
+                 self.interface.num_actions() + self.interface.num_select_unit_actions()] = 0
         return mask
-
-    def action_parameter_type(self, action_index):
-        """
-        :param action_index: Index into nonspatial actions
-        :return: Tuple of
-            param_type: The type of parameters this action takes
-            param_index: Index into all of the actions that takes this kind of parameter
-        """
-        if action_index < int(len(self.screen_dimensions) / 2):
-            return ParamType.SPATIAL, action_index
-        elif action_index < self.num_unit_selection_actions + int(len(self.screen_dimensions) / 2):
-            return ParamType.SELECT_UNIT, action_index - int(len(self.screen_dimensions) / 2)
-        return ParamType.NO_PARAMS, None
 
 
 class RoachesEnvironmentInterface(EnvironmentInterface):
     state_shape = [3, 84, 84]
-    screen_dimensions = [84, 84, 84, 84]
-    num_actions = 6
-    num_unit_selection_actions = 2
 
-    @classmethod
-    def _get_action_mask(cls, timestep):
-        mask = np.ones([cls.num_actions])
-        if pysc2_actions.FUNCTIONS.Attack_screen.id not in timestep.observation.available_actions:
-            mask[0] = 0
-            mask[1] = 0
-            mask[4] = 0
-        return mask
-
-    @classmethod
-    def _get_center_of_mass(cls, obs, alliance=PlayerRelative.SELF):
-        """returns the x,y of the center of mass for allied units
-        returns None if no allied units are present"""
-        num_units = 0
-        total_x = 0
-        total_y = 0
-        for unit in obs.observation.feature_units:
-            if unit.alliance == alliance:
-                total_x += unit[FeatureUnit.x]
-                total_y += unit[FeatureUnit.y]
-                num_units += 1
-        if num_units != 0:
-            return np.array([total_x / num_units, total_y / num_units])
-        else:
-            return None
-
-    # @classmethod
-    # def _rotate_action(cls, x, y):
-    #     yield
-    #     timestep = yield pysc2_actions.FUNCTIONS.select_point('select', (x, y))
-    #     if len(timestep.observation.multi_select) == 0:
-    #         if pysc2_actions.FUNCTIONS.Move_screen.id in timestep.observation.available_actions:
-    #             center_allies = cls._get_center_of_mass(timestep, PlayerRelative.SELF)
-    #             center_enemies = cls._get_center_of_mass(timestep, PlayerRelative.ENEMY)
-    #             if center_enemies is not None and center_allies is not None:
-    #                 direction = center_allies - center_enemies
-    #                 target = [x, y] + 10 * direction
-    #                 target = np.clip(target, a_min=0, a_max=83)
-    #                 if pysc2_actions.FUNCTIONS.Effect_Blink_screen.id in timestep.observation.available_actions:
-    #                     yield pysc2_actions.FUNCTIONS.Effect_Blink_screen('now', target)
-    #                 else:
-    #                     yield pysc2_actions.FUNCTIONS.Move_screen('now', target)
-    #     yield pysc2_actions.FUNCTIONS.select_army('select')
-    #     yield
-
-    @classmethod
-    def convert_action(cls, action):
-        action_index, coords, selection_coords, _ = action.as_tuple()
-        coords = coords if coords is not None else (-1, -1)
-        selection_coords = selection_coords if selection_coords is not None else (-1, -1)
-        selection_coords = np.clip(selection_coords, a_min=0, a_max=83)
-
-        # The order for the actions is important. Actions that take spacial arguments must go first, followed by
-        # actions which take selection arguments, followed by actions that take no arguments.
-        actions = [
-            [pysc2_actions.FUNCTIONS.Attack_screen('now', coords)],
-            [pysc2_actions.FUNCTIONS.Move_screen('now', coords)],
-
-            # cls._rotate_action(*selection_coords),
-            [pysc2_actions.FUNCTIONS.select_point('select', selection_coords)],
-            [pysc2_actions.FUNCTIONS.Attack_screen('now', selection_coords)],
-
-            [pysc2_actions.FUNCTIONS.select_army('select')],
-            [pysc2_actions.FUNCTIONS.no_op()]
+    def get_actions(self):
+        return [
+            EnvAction(pysc2_actions.FUNCTIONS.Attack_screen, ActionParamType.SPATIAL, ('now', None)),
+            EnvAction(pysc2_actions.FUNCTIONS.Move_screen, ActionParamType.SPATIAL, ('now', None)),
+            EnvAction(pysc2_actions.FUNCTIONS.Attack_screen, ActionParamType.SELECT_UNIT, ('now', None)),
+            EnvAction(pysc2_actions.FUNCTIONS.select_point, ActionParamType.SELECT_UNIT, ('select', None)),
+            EnvAction(pysc2_actions.FUNCTIONS.select_army, ActionParamType.NO_PARAMS, ('select', None)),
         ]
-        return actions[action_index]
 
-    @classmethod
-    def convert_state(cls, timestep):
+    def convert_state(self, timestep):
         feature_screen = timestep.observation.feature_screen
         beacon = (np.array(feature_screen.player_relative) == PlayerRelative.ENEMY).astype(np.float32)
         player = (np.array(feature_screen.player_relative) == PlayerRelative.SELF).astype(np.float32)
         health = np.array(feature_screen.unit_hit_points).astype(np.float32)
-        return np.stack([beacon, player, health], axis=0), cls._get_action_mask(timestep)
+        return np.stack([beacon, player, health], axis=0), self._get_action_mask(timestep)
 
 
 class TrainMarines(RoachesEnvironmentInterface):
     state_shape = [3, 84, 84]
-    num_actions = 7
-    screen_dimensions = [84, 84] * 3
-    num_unit_selection_actions = 1
 
-    @classmethod
-    def _get_action_mask(cls, timestep):
-        mask = np.ones([cls.num_actions])
-        actions = [
-            pysc2_actions.FUNCTIONS.Move_screen.id,
-            pysc2_actions.FUNCTIONS.Build_Barracks_screen.id,
-            pysc2_actions.FUNCTIONS.Build_SupplyDepot_screen.id,
-
-            pysc2_actions.FUNCTIONS.select_point.id,
-
-            pysc2_actions.FUNCTIONS.select_idle_worker.id,
-            pysc2_actions.FUNCTIONS.Train_Marine_quick.id,
-            pysc2_actions.FUNCTIONS.select_rect.id,
-            pysc2_actions.FUNCTIONS.no_op.id,
+    def get_actions(self):
+        return [
+            EnvAction(pysc2_actions.FUNCTIONS.Move_screen, ActionParamType.SPATIAL, ('now', None)),
+            EnvAction(pysc2_actions.FUNCTIONS.Build_Barracks_screen, ActionParamType.SPATIAL, ('now', None)),
+            EnvAction(pysc2_actions.FUNCTIONS.Build_SupplyDepot_screen, ActionParamType.SPATIAL, ('now', None)),
+            EnvAction(pysc2_actions.FUNCTIONS.select_point, ActionParamType.SELECT_UNIT, ('select', None)),
+            EnvAction(pysc2_actions.FUNCTIONS.select_idle_worker, ActionParamType.NO_PARAMS, ('select',)),
+            EnvAction(pysc2_actions.FUNCTIONS.select_army, ActionParamType.NO_PARAMS, ('now',)),
+            EnvAction(pysc2_actions.FUNCTIONS.select_rect, ActionParamType.NO_PARAMS, ('select', [0, 0], [83, 83])),
+            EnvAction(pysc2_actions.FUNCTIONS.no_op, ActionParamType.NO_PARAMS, ('select',)),
         ]
-        for i, action in enumerate(actions):
-            if action not in timestep.observation.available_actions:
-                mask[i] = 0
-        return mask
 
-    @classmethod
-    def convert_action(cls, action):
-        action_index, coords, selection_coords, selection_index = action.as_tuple()
-        coords = coords if coords is not None else (-1, -1)
-        selection_coords = selection_coords if selection_coords is not None else (-1, -1)
-        selection_coords = np.clip(selection_coords, a_min=0, a_max=83)
-
-        # The order for the actions is important. Actions that take spacial arguments must go first, followed by
-        # actions which take selection arguments, followed by actions that take no arguments.
-        actions = [
-            [pysc2_actions.FUNCTIONS.Move_screen('now', coords)],
-            [pysc2_actions.FUNCTIONS.Build_Barracks_screen('now', coords)],
-            [pysc2_actions.FUNCTIONS.Build_SupplyDepot_screen('now', coords)],
-
-            [pysc2_actions.FUNCTIONS.select_point('select', selection_coords)],
-
-            [pysc2_actions.FUNCTIONS.select_idle_worker('select')],
-            [pysc2_actions.FUNCTIONS.Train_Marine_quick('now')],
-            [pysc2_actions.FUNCTIONS.select_rect('select', [0, 0], [83, 83])],
-            [pysc2_actions.FUNCTIONS.no_op()]
-        ]
-        return actions[action_index]
-
-    @classmethod
-    def convert_state(cls, timestep):
+    def convert_state(self, timestep):
         feature_screen = timestep.observation.feature_screen
         none = (np.array(feature_screen.player_relative) == PlayerRelative.NONE).astype(np.float32)
         neutral = (np.array(feature_screen.player_relative) == PlayerRelative.NEUTRAL).astype(np.float32)
         player = (np.array(feature_screen.player_relative) == PlayerRelative.SELF).astype(np.float32)
-        return np.stack([none, neutral, player], axis=0), cls._get_action_mask(timestep)
-
-
-class BanelingsEnvironmentInterface(RoachesEnvironmentInterface):
-    state_shape = [3, 84, 84]
-    screen_dimensions = [84, 84, 84, 84, 84, 84]
-    num_actions = 3
-
-    @classmethod
-    def _get_action_mask(cls, timestep):
-        mask = np.ones([cls.num_actions])
-        if pysc2_actions.FUNCTIONS.Attack_screen.id not in timestep.observation.available_actions:
-            mask[0] = 0
-            mask[1] = 0
-        return mask
-
-    # @classmethod
-    # def _sacrifice_action(cls, x, y):
-    #     yield
-    #     timestep = yield pysc2_actions.FUNCTIONS.select_point('select', (x, y))
-    #     if len(timestep.observation.multi_select) == 0:
-    #         if pysc2_actions.FUNCTIONS.Move_screen.id in timestep.observation.available_actions:
-    #             center_allies = cls._get_center_of_mass(timestep, PlayerRelative.SELF)
-    #             center_enemies = cls._get_center_of_mass(timestep, PlayerRelative.ENEMY)
-    #             if center_enemies is not None and center_allies is not None:
-    #                 direction = center_allies - center_enemies
-    #                 target = [x, y] - 10 * direction
-    #                 target = np.clip(target, a_min=0, a_max=83)
-    #                 yield pysc2_actions.FUNCTIONS.Move_screen('now', target)
-    #     yield
-
-    @classmethod
-    def convert_action(cls, action):
-        action_index, coords, _, _ = action.as_tuple()
-        coords = coords if coords is not None else (9, 14)
-        actions = [
-            [pysc2_actions.FUNCTIONS.Attack_screen('now', coords)],
-            [pysc2_actions.FUNCTIONS.Move_screen('now', coords)],
-            # cls._sacrifice_action(*coords),
-            [pysc2_actions.FUNCTIONS.select_army('select')]
-        ]
-        return actions[action_index]
-
-    @classmethod
-    def convert_state(cls, timestep):
-        feature_screen = timestep.observation.feature_screen
-        beacon = (np.array(feature_screen.player_relative) == PlayerRelative.ENEMY).astype(np.float32)
-        player = (np.array(feature_screen.player_relative) == PlayerRelative.SELF).astype(np.float32)
-        health = np.array(feature_screen.unit_hit_points).astype(np.float32)
-        return np.stack([beacon, player, health], axis=0), cls._get_action_mask(timestep)
+        return np.stack([none, neutral, player], axis=0), self._get_action_mask(timestep)
 
 
 class BeaconEnvironmentInterface(EnvironmentInterface):
     state_shape = [2, 84, 84]
-    num_actions = 2
-    screen_dimensions = [84, 84] * 1
-    num_unit_selection_actions = 0
-    num_gltl_states = 5
 
-    @classmethod
-    def _get_action_mask(cls, timestep):
-        mask = np.ones([cls.num_actions])
-        actions = [
-            pysc2_actions.FUNCTIONS.Move_screen.id,
-            pysc2_actions.FUNCTIONS.select_army.id,
+    def get_actions(self):
+        return [
+            EnvAction(pysc2_actions.FUNCTIONS.Attack_screen, ActionParamType.SPATIAL, ('now', None)),
+            EnvAction(pysc2_actions.FUNCTIONS.select_army, ActionParamType.NO_PARAMS, ('select',)),
         ]
-        for i, action in enumerate(actions):
-            if action not in timestep.observation.available_actions:
-                mask[i] = 0
-        return mask
 
-    @classmethod
-    def convert_action(cls, action):
-        action_index, coords, _, _ = action.as_tuple()
-        coords = coords if coords is not None else (9, 14)
-        actions = [
-            [pysc2_actions.FUNCTIONS.Attack_screen('now', coords)],
-            [pysc2_actions.FUNCTIONS.select_army('select')]
-        ]
-        return actions[action_index]
-
-    @classmethod
-    def convert_state(cls, timestep):
+    def convert_state(self, timestep):
         player_relative = timestep.observation.feature_screen.player_relative
         beacon = (np.array(player_relative) == 3).astype(np.float32)
         player = (np.array(player_relative) == 1).astype(np.float32)
-        # TODO: Include list of true/false values for propositions
-        return np.stack([beacon, player], axis=0), cls._get_action_mask(timestep)
-
-    @classmethod
-    def convert_reward(self, timestep, action):
-        """
-        TODO: Convert timestep and action into reward to be used by GLTL
-        """
-        pass
+        return np.stack([beacon, player], axis=0), self._get_action_mask(timestep)

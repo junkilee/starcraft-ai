@@ -43,6 +43,7 @@ if __name__ == '__main__':
                       "Agent 1's race.")
     flags.DEFINE_bool("cuda", True, "Whether to train on gpu")
     flags.DEFINE_integer("parallel", 1, "How many instances to run in parallel.")
+    flags.DEFINE_integer("save_replay_episodes", 0, "How many episodes per replay save, 0 for no saves.")
 
     flags.DEFINE_string("map", None, "Name of a map to use.")
     flags.DEFINE_string("save_name", "recent", "Save run information under ./saves/<save_name>")
@@ -83,7 +84,6 @@ class StalkersVsRoachesMap(lib.Map):
 # ------------------------ MAIN ------------------------
 
 def main(unused_argv):
-
     save_dir = os.path.join('saves', FLAGS.save_name)
 
     runner_params = {
@@ -113,7 +113,7 @@ def main(unused_argv):
         'game_steps_per_episode': FLAGS.game_steps_per_episode,
         'disable_fog': FLAGS.disable_fog,
         'visualize': FLAGS.render,
-        'save_replay_episodes': 200,
+        'save_replay_episodes': FLAGS.save_replay_episodes,
         'replay_dir': os.path.join(save_dir, 'replays')
     }
 

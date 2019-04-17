@@ -1,6 +1,39 @@
 import numpy as np
 import tensorflow as tf
 
+from sc2ai.env_interface import AgentAction
+
+
+def lstm_step(lstm, features, memory):
+    state_tuple = tf.unstack(memory, axis=0)
+    flattened_state = features
+    lstm_output, next_state_tuple = lstm(flattened_state, state=state_tuple)
+    next_state = tf.stack(next_state_tuple, axis=0)
+    return lstm_output, next_state
+
+
+def sample_action(interface, nonspatial_probs, spatial_probs, unit_probs=None, unit_coords=None):
+    """
+    :return: Generates a list of AgentActions, one for each parallel agent.
+    """
+    chosen_nonspatials = sample_multiple(nonspatial_probs)  # [num_games]
+    agent_actions = []
+    for i, chosen_nonspatial in enumerate(chosen_nonspatials):
+        if chosen_nonspatial < interface.num_spatial_actions():
+            x = np.random.choice(84, p=spatial_probs[0, i, :, chosen_nonspatial])
+            y = np.random.choice(84, p=spatial_probs[1, i, :, chosen_nonspatial])
+            agent_actions.append(AgentAction(chosen_nonspatial, spatial_coords=(x, y)))
+        elif chosen_nonspatial < interface.num_spatial_actions() + interface.num_select_unit_actions():
+            num_units = unit_probs.shape[2]
+            param_index = chosen_nonspatial - interface.num_spatial_actions()
+            unit_choice = np.random.choice(num_units, p=unit_probs[i, param_index])
+            agent_actions.append(AgentAction(chosen_nonspatial,
+                                             unit_selection_coords=unit_coords[i, unit_choice].astype(np.int32),
+                                             unit_selection_index=unit_choice))
+        else:
+            agent_actions.append(AgentAction(chosen_nonspatial))
+    return agent_actions
+
 
 def pad_stack(arrays, pad_axis, stack_axis):
     """
