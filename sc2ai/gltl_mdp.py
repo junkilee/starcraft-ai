@@ -25,10 +25,11 @@ class GLTLMDP:
         assert(set(self.aps) in propositionDict)
 
     def transition(self, timestep):
-        results_dict = self.evaluator(timestep)
-        transitionMatrix = get_next_trans_mat(self.transition_mats_dict, results_dict, self.ordered_aps)
+        results_dict = self.evaluator.get_results_dict(timestep)
+        transitionMatrix = get_next_trans_mat(self.transition_mats_dict, results_dict, self.ordered_aps) # TODO maybe won't work
         transitionRow = transitionMatrix[self.currentState]
-        self.currentState = np.random.choice(len(transitionRow), 1, p=transitionRow)
+        self.currentState = np.random.choice(len(transitionRow), p=transitionRow)
+
 
 def get_ap_combo_key(classifier_dict, ordered_aps):
     """
@@ -42,8 +43,7 @@ def get_ap_combo_key(classifier_dict, ordered_aps):
     if all(ap in classifier_dict for ap in ordered_aps):
         return tuple([classifier_dict[ap] for ap in ordered_aps])
     else:
-        raise ValueError("APs must be either `belowground`, `logleft`, "
-                         "`logtouching`, or `walltouching`.")
+        raise ValueError("APs must be `atbeacon`.")
 
 
 def get_next_trans_mat(transition_mats_dict, results_dict, ordered_aps):

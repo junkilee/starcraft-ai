@@ -27,3 +27,6 @@ class Evaluator:
             return True
         else:
             return False
+
+    def get_results_dict(self, timestep):
+        return {"atbeacon": self.at_beacon(timestep)}

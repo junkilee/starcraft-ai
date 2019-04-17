@@ -129,6 +129,9 @@ class SCEnvironmentWrapperGLTL:
         total_reward = 0
         for action in action_list:
             self.timestep = self.env.step([action])[0]
+
+            # transition in the GLTL MDP
+            
             # if self.render:
             #     time.sleep(0.15)
 
