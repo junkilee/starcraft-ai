@@ -3,7 +3,8 @@ from gltl_tools.gltl.gltl import gltl_to_mdp
 from gltl_tools.gltl.utils import mdp_to_dict_matrix, return_ordered_aps
 
 class GLTLMDP:
-    """ A class representing the mental state of an agent using GLTL. It manages transitions between state based on a list of propositions.
+    """
+    A class representing the mental state of an agent using GLTL. It manages transitions between state based on a list of propositions.
     """
 
     def __init__(self, expression, propositionDict):
