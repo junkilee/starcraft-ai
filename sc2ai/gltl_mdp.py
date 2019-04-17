@@ -19,6 +19,7 @@ class GLTLMDP:
         self.num_task_states = len(self.mdp["states"])
         self.acc_state_index = next(iter(self.mdp["accept"]))
         self.rej_state_index = next(iter(self.mdp["reject"]))
+        self.init_state_index = self.mdp["init"]
         self.evaluator = Evaluator()
         # make sure that APs are a subset of proposition dict
         assert(set(self.aps) in proposition_dict)
