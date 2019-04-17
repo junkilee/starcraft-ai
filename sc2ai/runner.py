@@ -102,10 +102,10 @@ class AgentRunner:
 
         agent_states, agent_masks, _, dones = self.env.reset()
         rollouts = [Rollout() for _ in range(num_games)]
-        memory = None
+        memory = self.agent.get_initial_memory(num_games)
 
         while not all(dones):
-            agent_actions, memory = self.agent.step(agent_states, agent_masks, memory)
+            agent_actions, next_memory = self.agent.step(agent_states, agent_masks, memory)
             env_action_lists = self.agent_interface.convert_actions(agent_actions)
 
             # Feed actions to environment
@@ -114,15 +114,17 @@ class AgentRunner:
             # Record info in rollouts
             for i in range(num_games):
                 rollouts[i].add_step(state=agent_states[i],
+                                     memory=memory[i],
                                      mask=agent_masks[i],
                                      action=agent_actions[i],
                                      reward=rewards[i],
                                      done=dones[i])
             agent_states, agent_masks = next_agent_states, next_masks
+            memory = next_masks
 
         # Add terminal state in rollbacks
         for i in range(num_games):
-            rollouts[i].add_step(state=agent_states[i])
+            rollouts[i].add_step(state=agent_states[i], memory=memory)
         return rollouts
 
     # ------------------------ UTILS ------------------------

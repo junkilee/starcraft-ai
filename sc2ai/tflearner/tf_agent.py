@@ -59,17 +59,21 @@ class ActorCriticAgent(ABC):
         pass
 
     @abstractmethod
-    def get_feed_dict(self, states, masks, actions, bootstrap_state):
+    def get_feed_dict(self, states, memory, masks, actions, bootstrap_state):
         """
         Get the feed dict with values for all placeholders that are dependenceies for the tensors
         `bootstrap_value`, `train_values`, and `train_log_probs`.
 
+        :param memory: Memory corresponding to the state.
         :param bootstrap_state: A numpy a array of shape [*state_shape] representing the terminal state.
         :param masks: A numpy array of shape [T, num_actions].
         :param states: A numpy array of shape [T, *state_shape].
         :param actions: A list of action indices with length T.
         :return: The feed dict required to evaluate `train_values` and `train_log_probs`
         """
+
+    def get_initial_memory(self, num_agents):
+        return [None] * num_agents
 
 
 class InterfaceAgent(ActorCriticAgent, ABC):
@@ -80,14 +84,14 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         self.num_spatial_actions = self.interface.num_spatial_actions()
         self.num_select_actions = self.interface.num_select_unit_actions()
 
-        self.state_input = tf.placeholder(tf.float32, [None, *self.interface.state_shape])  # [batch, *state_shape]
-        self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions()])  # [batch, num_actions]
+        self.state_input = tf.placeholder(tf.float32, [None, *self.interface.state_shape], name='state_input')  # [batch, *state_shape]
+        self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions()], name='mask_input')  # [batch, num_actions]
 
-        self.action_input = tf.placeholder(tf.int32, [None])  # [T]
-        self.spacial_input = tf.placeholder(tf.int32, [None, 2])  # [T, 2]   dimension size 2 for x and y
+        self.action_input = tf.placeholder(tf.int32, [None], name='action_input')  # [T]
+        self.spacial_input = tf.placeholder(tf.int32, [None, 2], name='spatial_input')  # [T, 2]   dimension size 2 for x and y
         self.unit_selection_input = tf.placeholder(tf.int32, [None], name="unit_selection_input")
 
-    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
+    def get_feed_dict(self, states, memory, masks, actions=None, bootstrap_state=None):
         feed_dict = {
             self.state_input: np.array(states),
             self.mask_input: np.array(masks),
@@ -111,6 +115,10 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         index = (self.action_input - self.num_spatial_actions) % tf.convert_to_tensor(num_selection_actions)
         return util.index(selection_probs, index)  # [T]
 
+    def _get_chosen_spacial_prob(self, spacial_probs, spacial_choice):
+        spacial_probs = util.index(spacial_probs, spacial_choice)  # [T, num_screen_dimensions]
+        return util.index(spacial_probs, self.action_input % tf.convert_to_tensor(self.num_spatial_actions))  # [T]
+
     def _train_log_probs(self, nonspatial_probs, spatial_probs=None, selection_probs=None):
         nonspatial_log_probs = tf.log(util.index(nonspatial_probs, self.action_input) + 1e-10)
 
@@ -133,10 +141,6 @@ class InterfaceAgent(ActorCriticAgent, ABC):
                                        y=tf.zeros_like(selection_log_prob))
         return result
 
-    def _get_chosen_spacial_prob(self, spacial_probs, spacial_choice):
-        spacial_probs = util.index(spacial_probs, spacial_choice)  # [T, num_screen_dimensions]
-        return util.index(spacial_probs, self.action_input % tf.convert_to_tensor(self.num_spatial_actions))  # [T]
-
     def _probs_from_features(self, features):
         nonspatial_probs = parts.actor_nonspatial_head(features, self.mask_input, self.num_actions)
         spatial_probs = parts.actor_spatial_head(features, screen_dim=84, num_spatial_actions=self.num_spatial_actions)
@@ -156,10 +160,11 @@ class ConvAgent(InterfaceAgent):
                 self.state_input: state,
                 self.mask_input: mask
             })
-        return util.sample_action(self.num_spatial_actions, nonspatial_probs, spatial_probs), None
+        return util.sample_action(self.interface, nonspatial_probs, spatial_probs), None
 
-    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
-        feed_dict = super(ConvAgent, self).get_feed_dict(states, masks, actions, bootstrap_state)
+    def get_feed_dict(self, states, memory, masks, actions=None, bootstrap_state=None):
+        feed_dict = super(ConvAgent, self).get_feed_dict(states, memory, masks,
+                                                         actions=actions, bootstrap_state=bootstrap_state)
         return {
             self.bootstrap_state_input: np.array(bootstrap_state),
             **feed_dict
@@ -184,25 +189,22 @@ class LSTMAgent(InterfaceAgent):
         self.self_attention = SelfAttention(hidden_size=128, num_heads=2, attention_dropout=0, train=True)
         self.lstm = tf.contrib.rnn.LSTMCell(self.rnn_size)
 
-        self.memory_input = tf.placeholder(tf.float32, [2, None, self.rnn_size], name="memory_input")
+        self.lstm_memory_input = tf.placeholder(tf.float32, [2, None, self.rnn_size], name="memory_input")
         self.unit_embeddings_input = tf.placeholder(tf.float32, [None, None, self.interface.unit_embedding_size],
                                                     name="unit_embeddings_input")
-
-        # TODO: Add in previous action index as an input
-        self.prev_action_input = tf.placeholder(tf.int32, [None], name='prev_action_input')
+        self.unit_selection_input = tf.placeholder(tf.int32, [None], name="unit_selection_input")
+        self.prev_action_input = tf.placeholder(tf.int32, [None], name='prev_action_input')  # TODO: Implement this
+        self.gltl_state = tf.placeholder(tf.int32, [None], name='gltl_state')
 
         self.features = self.features()  # Shape [batch_size, num_features]
+        lstm_output, self.next_lstm_state = util.lstm_step(self.lstm, self.features, self.lstm_memory_input)
 
-        lstm_output, self.next_lstm_state = self._lstm_step()
-        self.train_output = self._lstm_step_train()
-        self.all_values = parts.value_head(self.train_output)
+        self.all_values = parts.value_head(lstm_output)
+        self.nonspacial_probs, self.spatial_probs = self._probs_from_features(lstm_output)
+        self.nonspacial_train, self.spatial_probs = self._probs_from_features(lstm_output[:-1])
 
-        self.nonspatial_probs, self.spacial_probs_x, self.spacial_probs_y = self._probs_from_features(lstm_output)
-        self.nonspatial_train, self.spacial_train_x, self.spacial_train_y = \
-            self._probs_from_features(self.train_output[:-1])
         self.unit_selection_probs = self._selection_probs_from_features(lstm_output, self.unit_embeddings_input)
-        self._f1 = lstm_output
-        self.unit_selection_probs_train = self._selection_probs_from_features(self.train_output[:-1],
+        self.unit_selection_probs_train = self._selection_probs_from_features(lstm_output[:-1],
                                                                               self.unit_embeddings_input[:-1])
 
     def _selection_probs_from_features(self, features, embeddings):
@@ -211,7 +213,11 @@ class LSTMAgent(InterfaceAgent):
     def features(self):
         conv_features = parts.conv_body(self.state_input)
         unit_features = tf.reduce_sum(self.self_attention(self.unit_embeddings_input, bias=0), axis=1)
-        return tf.concat([conv_features, unit_features], axis=1)
+        gltl_features = tf.one_hot(self.gltl_state, self.interface.num_gltl_states)
+        return tf.concat([conv_features, unit_features, gltl_features], axis=1)
+
+    def next_mental_state(self, state, mental_state):
+        return 1
 
     def step(self, states, masks, memory):
         """
@@ -219,45 +225,38 @@ class LSTMAgent(InterfaceAgent):
             "unit_embeddings": numpy array with shape [num_units, embedding_size]
             "state": numpy array with shape [*state_shape]
         :param masks: numpy array of shape [batch_size, num_actions]
-        :param memory: numpy of shape [2, batch_size, memory_size] or None for the first step
+        :param memory: list of length size of tuples:
+            [([2, memory_size], []), ...] or None for the first step
         """
         if memory is None:
-            memory = np.zeros((2, len(states), self.rnn_size))
+            memory = [(np.zeros((2, self.rnn_size)), 0) for _ in range(len(states))]
 
-        feed_dict = {
-            **self.get_feed_dict(states, masks),
-            self.memory_input: memory
-        }
-        results = self.session.run(
-            [self.next_lstm_state, self.nonspatial_probs, self.unit_selection_probs,
-             *self.spacial_probs_x, *self.spacial_probs_y], feed_dict)
-        next_lstm_state, nonspatial_probs, selection_probs = results[:3]
-        spacial_probs = results[3:]
-
-        spacial_probs_x = spacial_probs[:self.num_screen_dims]
-        spacial_probs_y = spacial_probs[self.num_screen_dims:]
-
+        feed_dict = self.get_feed_dict(states, memory, masks)
+        next_lstm_state, nonspacial_probs, selection_probs, spatial_probs = self.session.run(
+            [self.next_lstm_state, self.nonspacial_probs, self.spatial_probs, self.unit_selection_probs], feed_dict)
+        new_memory = [(next_lstm_state[:, i, :], self.next_mental_state(states[i], memory[i][1]))
+                      for i in range(len(states))]
         unit_coords = util.pad_stack([state['unit_coords'][:, :2] for state in states], pad_axis=0, stack_axis=0)
-        return self.sample_action_index_with_units(nonspatial_probs, spacial_probs_x,
-                                                   spacial_probs_y, selection_probs, unit_coords), next_lstm_state
+        return util.sample_action(nonspacial_probs, spatial_probs, selection_probs, unit_coords), new_memory
 
-    def _lstm_step(self):
-        state_tuple = tf.unstack(self.memory_input, axis=0)
-        flattened_state = self.features
-        lstm_output, next_state_tuple = self.lstm(flattened_state, state=state_tuple)
-        next_state = tf.stack(next_state_tuple, axis=0)
-        return lstm_output, next_state
-
-    def _lstm_step_train(self):
-        flattened_state = tf.expand_dims(self.features, axis=0)
-        train_output, _ = tf.nn.dynamic_rnn(self.lstm, flattened_state, dtype=tf.float32)
-        return tf.squeeze(train_output, axis=0)
-
-    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
+    def get_feed_dict(self, states, memories, masks, actions=None, bootstrap_state=None):
+        """
+        :param states:
+        :param memories: List of length batch size containing
+        :param masks:
+        :param actions:
+        :param bootstrap_state:
+        :return:
+        """
         screens = np.stack([state['screen'] for state in states], axis=0)
+        lstm_memory = np.stack([memory[0] for memory in memories], axis=1)
+        gltl_memory = np.stack([memory[1] for memory in memories], axis=0)
+
         feed_dict = {
             self.state_input: np.array(states),
             self.mask_input: np.array(masks),
+            self.lstm_memory_input: lstm_memory,
+            self.gltl_state: np.array(gltl_memory),
         }
         all_states = states if bootstrap_state is None else [*states, bootstrap_state]
         unit_embeddings = util.pad_stack([state['unit_embeddings'] for state in all_states], pad_axis=0, stack_axis=0)
@@ -270,10 +269,10 @@ class LSTMAgent(InterfaceAgent):
             feed_dict[self.state_input] = screens
 
         if actions is not None:
-            nonspatial, spacials, selection_coords, selection_indices = zip(*[a.as_tuple() for a in actions])
+            nonspacial, spacials, selection_coords, selection_indices = zip(*actions)
             spacials = [(13, 27) if spacial is None else spacial for spacial in spacials]
             selections = [-1 if selection is None else selection for selection in selection_indices]
-            feed_dict[self.action_input] = np.array(nonspatial)
+            feed_dict[self.action_input] = np.array(nonspacial)
             feed_dict[self.spacial_input] = np.array(spacials)
             feed_dict[self.unit_selection_input] = np.array(selections)
         return feed_dict
@@ -285,27 +284,4 @@ class LSTMAgent(InterfaceAgent):
         return self.all_values[:-1]
 
     def train_log_probs(self):
-        return self._train_log_probs_with_units(self.nonspatial_train, self.spacial_train_x, self.spacial_train_y,
-                                                self.unit_selection_probs_train)
-
-    def sample_action_index_with_units(self, nonspatial_probs, spacial_probs_x, spacial_probs_y,
-                                       unit_distribution, unit_coords):
-        """
-        unit_distribution is an array of shape [num_games, num_select_actions, num_units]
-        :return: Generates an list of action index tuple of type (nonspatial_index, (spacial_x, spacial_y))
-        """
-        actions = self.sample_action_index(nonspatial_probs, spacial_probs_x, spacial_probs_y)
-        num_units = unit_distribution.shape[2]
-        new_actions = []
-        unit_coords = np.stack(unit_coords)
-
-        for i, action in enumerate(actions):
-            param_type, param_index = self.interface[action.index].param_type
-            if param_type is ActionParamType.SELECT_UNIT:
-                unit_choice = np.random.choice(num_units, p=unit_distribution[i, param_index])
-                new_actions.append(AgentAction(
-                                    unit_selection_coords=unit_coords[i, unit_choice].astype(np.int32)))
-            else:
-                new_actions.append(action)
-        return new_actions
-
+        return self._train_log_probs(self.nonspacial_train, self.spatial_probs, self.unit_selection_probs_train)
