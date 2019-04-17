@@ -132,7 +132,7 @@ class SCEnvironmentWrapperGLTL:
             # if self.render:
             #     time.sleep(0.15)
 
-            total_reward += self.timestep.reward
+            total_reward += int(self.gltl_mdp.current_state == self.gltl_mdp.acc_state_index)
             self.done = int(self.is_done())
 
             if self.done:
