@@ -1,12 +1,10 @@
 import numpy as np
 import math
+
+
 class Evaluator:
-
-    def __init__(self):
-        #TODO: Add info from previous timestep
-        pass
-
-    def at_beacon(self,timestep):
+    @classmethod
+    def at_beacon(cls, timestep):
         """
         Function to check if MoveToBeacon agent
         has reached the beacon

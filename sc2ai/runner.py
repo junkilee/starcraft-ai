@@ -1,7 +1,8 @@
 import traceback
 import os
 
-from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
+from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper, SCEnvironmentWrapperGLTL
+from sc2ai.tflearner.evaluator import Evaluator
 from sc2ai.tflearner.tflearner import ActorCriticLearner, Rollout
 from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
 from sc2ai.env_interface import *
@@ -43,10 +44,17 @@ class AgentRunner:
         # Initializes interface, env, agent and learner. On reset we load the model
         self.agent_interface = build_agent_interface(self.sc2map)
 
+        proposition_map = {
+            "atbeacon": lambda timestep: Evaluator.at_beacon(timestep)
+        }
+
         # Pass into MultipleEnvironment a factory to create SCEnvironments
-        self.env = MultipleEnvironment(lambda: SCEnvironmentWrapper(self.agent_interface, self.env_kwargs),
-                                       num_parallel_instances=self.runner_params['num_parallel_instances'])
-        self.agent = LSTMAgent(self.agent_interface)
+        self.env = MultipleEnvironment(lambda: SCEnvironmentWrapperGLTL(
+            self.agent_interface,
+            "F_{0.1}atbeacon",
+            proposition_map,
+            self.env_kwargs), num_parallel_instances=self.runner_params['num_parallel_instances'])
+        self.agent = ConvAgent(self.agent_interface)
 
         # On resets, always load the model
         load_model = True if reset else self.model_params['load_model']
