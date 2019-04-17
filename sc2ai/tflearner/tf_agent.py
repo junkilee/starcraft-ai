@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import tensorflow as tf
 import numpy as np
 
-from sc2ai.env_interface import ParamType, AgentAction
+from sc2ai.env_interface import ActionParamType, AgentAction
 from sc2ai.tflearner import util
 from sc2ai.tflearner import parts
 from sc2ai.tflearner.attention import SelfAttention
@@ -301,8 +301,8 @@ class LSTMAgent(InterfaceAgent):
         unit_coords = np.stack(unit_coords)
 
         for i, action in enumerate(actions):
-            param_type, param_index = self.interface.action_parameter_type(action.action_type)
-            if param_type is ParamType.SELECT_UNIT:
+            param_type, param_index = self.interface[action.index].param_type
+            if param_type is ActionParamType.SELECT_UNIT:
                 unit_choice = np.random.choice(num_units, p=unit_distribution[i, param_index])
                 new_actions.append(AgentAction(action_type=action.action_type,
                                     unit_selection_coords=unit_coords[i, unit_choice].astype(np.int32)))

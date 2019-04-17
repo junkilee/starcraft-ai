@@ -8,28 +8,49 @@ from pysc2.lib.features import PlayerRelative, FeatureUnit
 from abc import ABC, abstractmethod
 
 
-class ParamType(Enum):
+class ActionParamType(Enum):
     SPATIAL = 1
     SELECT_UNIT = 2
     NO_PARAMS = 3
 
 
 class AgentAction:
-    def __init__(self, action_type, spatial_coords=None, unit_selection_coords=None, unit_selection_index=None):
-        self.action_type = action_type
+    def __init__(self, index, spatial_coords=None, unit_selection_coords=None, unit_selection_index=None):
+        self.index = index
         self.spatial_coords = spatial_coords
         self.unit_selection_coords = unit_selection_coords
         self.unit_selection_index = unit_selection_index
 
     def as_tuple(self):
-        return self.action_type, self.spatial_coords, self.unit_selection_coords, self.unit_selection_index
+        return self.index, self.spatial_coords, self.unit_selection_coords, self.unit_selection_index
+
+
+class EnvAction:
+    def __init__(self, sc2_function, param_type, fixed_params=(), placeholder_indices=()):
+        self.sc2_function = sc2_function
+        self.param_type = param_type
+        self.fixed_params = fixed_params
+        self.placeholder_indices = list(placeholder_indices)
+
+    def get_id(self):
+        return self.sc2_function.id
+
+    def get_sc2_action(self, action):
+        parameters = []
+        if self.fixed_params == ActionParamType.SPATIAL:
+            parameters = [action.spatial_coords]
+        elif self.fixed_params == ActionParamType.SELECT_UNIT:
+            parameters = [action.unit_selection_coords]
+
+        all_params = list(self.fixed_params)
+        for param, index in zip(parameters, self.placeholder_indices):
+            all_params.insert(param, index)
+
+        return self.sc2_function(*all_params)
 
 
 class EnvironmentInterface(ABC):
     state_shape = None
-    screen_dimensions = None
-    num_actions = None
-    num_unit_selection_actions = 0
 
     def convert_states(self, timesteps):
         state_mask_pairs = [self.convert_state(timestep) for timestep in timesteps]
@@ -41,15 +62,6 @@ class EnvironmentInterface(ABC):
         return [self.convert_action(action) for action in actions]
 
     @abstractmethod
-    def convert_action(self, action):
-        """
-        Converts an action output from the agent into a pysc2 action.
-        :param action: A tuple of (action_index, coordinates)
-        :return: A list of pysc2 action objects
-        """
-        pass
-
-    @abstractmethod
     def convert_state(self, timestep):
         """
         :param timestep: Timestep obtained from pysc2 environment step.
@@ -57,8 +69,38 @@ class EnvironmentInterface(ABC):
         """
         pass
 
+    @classmethod
+    @abstractmethod
+    def get_actions(cls):
+        pass
+
     def dummy_state(self):
-        return np.ones(self.state_shape), np.ones((self.num_actions,))
+        return np.ones(self.state_shape), np.ones((self.num_actions()))
+
+    @classmethod
+    def screen_dimensions(cls):
+        return [84, 84] * len([action for action in cls.get_actions() if action.param_type == ActionParamType.SPATIAL])
+
+    @classmethod
+    def num_select_unit_actions(cls):
+        return [84, 84] * len([action for action in cls.get_actions()
+                               if action.param_type == ActionParamType.SELECT_UNIT])
+
+    @classmethod
+    def num_actions(cls):
+        return len(cls.get_actions())
+
+    @classmethod
+    def _get_action_mask(cls, timestep):
+        mask = np.ones([cls.num_actions()])
+        for i, action in enumerate(cls.get_actions()):
+            if action.get_id() not in timestep.observation.available_actions:
+                mask[i] = 0
+        return mask
+
+    @classmethod
+    def convert_action(cls, action):
+        return cls.get_actions()[action.index].get_sc2_action(action)
 
 
 class EmbeddingInterfaceWrapper(EnvironmentInterface):
@@ -149,10 +191,10 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
             param_index: Index into all of the actions that takes this kind of parameter
         """
         if action_index < int(len(self.screen_dimensions) / 2):
-            return ParamType.SPATIAL, action_index
+            return ActionParamType.SPATIAL, action_index
         elif action_index < self.num_unit_selection_actions + int(len(self.screen_dimensions) / 2):
-            return ParamType.SELECT_UNIT, action_index - int(len(self.screen_dimensions) / 2)
-        return ParamType.NO_PARAMS, None
+            return ActionParamType.SELECT_UNIT, action_index - int(len(self.screen_dimensions) / 2)
+        return ActionParamType.NO_PARAMS, None
 
 
 class RoachesEnvironmentInterface(EnvironmentInterface):
@@ -346,44 +388,13 @@ class BanelingsEnvironmentInterface(RoachesEnvironmentInterface):
 
 class BeaconEnvironmentInterface(EnvironmentInterface):
     state_shape = [2, 84, 84]
-    screen_dimensions = [84, 84]
-
-    actions = {
-        ParamType.SPATIAL : [
-            (pysc2_actions.FUNCTIONS.Attack_screen, 'now')],
-        ParamType.SELECT_UNIT : [],
-        ParamType.NO_PARAMS : [
-            (pysc2_actions.FUNCTIONS.select_army, 'select')]
-    }
 
     @classmethod
-    
-
-    @classmethod
-    def num_actions(cls):
-        return len(cls._get_all_actions())
-
-    @classmethod
-    def _get_all_actions(cls):
-        return list(itertools.chain(*cls.actions.values()))
-
-    @classmethod
-    def _get_action_mask(cls, timestep):
-        mask = np.ones([cls.num_actions])
-        if pysc2_actions.FUNCTIONS.Attack_screen.id not in timestep.observation.available_actions:
-            mask[0] = 0
-        return mask
-
-    @classmethod
-    def convert_action(cls, action):
-        print(cls.actions)
-        action_index, coords, _, _ = action.as_tuple()
-        coords = coords if coords is not None else (9, 14)
-        actions = [
-            [pysc2_actions.FUNCTIONS.Attack_screen('now', coords)],
-            [pysc2_actions.FUNCTIONS.select_army('select')]
+    def get_actions(cls):
+        return [
+            EnvAction(pysc2_actions.FUNCTIONS.Attack_screen, ActionParamType.SPATIAL, ('now',), (1,)),
+            EnvAction(pysc2_actions.FUNCTIONS.select_army, ActionParamType.NO_PARAMS, ('select',)),
         ]
-        return actions[action_index]
 
     @classmethod
     def convert_state(cls, timestep):
