@@ -78,7 +78,6 @@ class StalkersVsRoachesMap(lib.Map):
 # ------------------------ MAIN ------------------------
 
 def main(unused_argv):
-
     save_dir = os.path.join('saves', FLAGS.save_name)
 
     runner_params = {

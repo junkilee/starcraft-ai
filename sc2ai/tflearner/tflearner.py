@@ -92,8 +92,6 @@ class ActorCriticLearner:
                     self._load_model()
                 except ValueError:
                     pass
-            else:
-                open(self.rewards_path, 'w').close()
 
     def update_model(self, rollouts):
         for i in range(self.num_games):
@@ -113,23 +111,12 @@ class ActorCriticLearner:
         save_path = self.saver.save(self.session, self.weights_path)
         print("Model Saved in %s" % save_path)
 
-
     def _load_model(self):
         """
         Loads the model from weights stored in the current `save_path`.
         """
         self.saver.restore(self.session, self.weights_path)
         print('Model Loaded')
-
-
-    def _log_data(self, reward):
-        self.episode_counter += 1
-        with open(self.rewards_path, 'a+') as f:
-            f.write('%d\n' % reward)
-
-        if self.episode_counter % 50 == 0:
-            self._save_model()
-
 
     def _ac_loss(self):
         num_steps = tf.shape(self.rewards_input)[0]

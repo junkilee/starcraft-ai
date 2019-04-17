@@ -14,17 +14,16 @@ def build_agent_interface(map_name):
         return EmbeddingInterfaceWrapper(RoachesEnvironmentInterface())
     elif map_name == 'MoveToBeacon':
         return BeaconEnvironmentInterface()
-    elif map_name == 'DefeatZerglingsAndBanelings':
-        return BanelingsEnvironmentInterface()
     elif map_name == 'BuildMarines':
         return EmbeddingInterfaceWrapper(TrainMarines())
     else:
         raise Exception('Unsupported Map')
 
+
 # ------------------------ RUNNER ------------------------
 
-class AgentRunner:
 
+class AgentRunner:
     def __init__(self, sc2map, runner_params, model_params, env_kwargs):
         self.sc2map = sc2map
         self.runner_params = runner_params
@@ -34,6 +33,10 @@ class AgentRunner:
         self.rewards_path = os.path.join(self.runner_params['save_dir'], 'rewards.txt')
         self.save_every = self.model_params['save_every']
 
+        # Clear rewards on new run with the same name
+        if not self.model_params['load_model']:
+            open(self.rewards_path, 'w').close()
+
         self.initialize()
 
     def initialize(self, reset=False):
@@ -41,31 +44,26 @@ class AgentRunner:
         self.agent_interface = build_agent_interface(self.sc2map)
 
         # Pass into MultipleEnvironment a factory to create SCEnvironments
-        self.env = MultipleEnvironment(lambda: SCEnvironmentWrapper(self.env_kwargs),
-                                            num_parallel_instances=self.runner_params['num_parallel_instances'])
-        
+        self.env = MultipleEnvironment(lambda: SCEnvironmentWrapper(self.agent_interface, self.env_kwargs),
+                                       num_parallel_instances=self.runner_params['num_parallel_instances'])
         self.agent = ConvAgent(self.agent_interface)
 
         # On resets, always load the model
         load_model = True if reset else self.model_params['load_model']
-
         self.learner = ActorCriticLearner(self.env, self.agent,
-                                        save_dir=self.runner_params['save_dir'],
-                                        load_model=load_model,
-                                        gamma=self.model_params['gamma'],
-                                        td_lambda=self.model_params['td_lambda'],
-                                        learning_rate=self.model_params['learning_rate'])
+                                          save_dir=self.runner_params['save_dir'],
+                                          load_model=load_model,
+                                          gamma=self.model_params['gamma'],
+                                          td_lambda=self.model_params['td_lambda'],
+                                          learning_rate=self.model_params['learning_rate'])
 
-    
     # ------------------------ TRAINING ------------------------
 
     def train_agent(self, num_training_episodes, reset_env_every=1000):
         # Trains the agent for num_training_episodes
-        
         self.episode_count = 0
+        save_every = self.model_params['save_every']  # for convenience
 
-        save_every = self.model_params['save_every'] # for convenience
-    
         print("Runner: beinning training for", num_training_episodes, "episodes")
         while self.episode_count < num_training_episodes:
 
@@ -80,23 +78,20 @@ class AgentRunner:
 
             # Train this episode
             self.train_episode()
-        
+
         print("Runner: training fininshed, trained", self.episode_count, "episodes")
         self._close_env()
 
-
     def train_episode(self):
         try:
-            rollouts = self.forward_pass() # Run the model
-            self.learner.update_model(rollouts) # Update the model
-
-            self._log_rewards(rollouts) # Log these rollouts
+            rollouts = self.forward_pass()  # Run the model
+            self.learner.update_model(rollouts)  # Update the model
+            self._log_rewards(rollouts)  # Log these rollouts
 
         except Exception as e:
             print("Runner: Encountered error in train_episode:", e)
             traceback.print_exc()
             self._reset()
-
 
     def forward_pass(self):
         """
@@ -105,33 +100,29 @@ class AgentRunner:
         """
         num_games = self.env.num_parallel_instances
 
-        env_states, _, dones = self.env.reset()
+        agent_states, agent_masks, _, dones = self.env.reset()
         rollouts = [Rollout() for _ in range(num_games)]
         memory = None
 
         while not all(dones):
-            agent_states, agent_masks = self.agent_interface.convert_states(env_states)
             agent_actions, memory = self.agent.step(agent_states, agent_masks, memory)
             env_action_lists = self.agent_interface.convert_actions(agent_actions)
 
             # Feed actions to environment
-            next_env_states, rewards, dones = self.env.step(env_action_lists)
+            next_agent_states, next_masks, rewards, dones = self.env.step(env_action_lists)
 
             # Record info in rollouts
             for i in range(num_games):
-                rollouts[i].add_step(state=agent_states[i], 
+                rollouts[i].add_step(state=agent_states[i],
                                      mask=agent_masks[i],
-                                     action=agent_actions[i], 
+                                     action=agent_actions[i],
                                      reward=rewards[i],
                                      done=dones[i])
-
-            env_states = next_env_states
+            agent_states, agent_masks = next_agent_states, next_masks
 
         # Add terminal state in rollbacks
-        agent_states, agent_masks = self.agent_interface.convert_states(env_states)
         for i in range(num_games):
             rollouts[i].add_step(state=agent_states[i])
-
         return rollouts
 
     # ------------------------ UTILS ------------------------
@@ -147,7 +138,6 @@ class AgentRunner:
         self._close_env()
         self.initialize(reset=True)
 
-    
     def _close_env(self):
         # Tell env to shutdown
         print("Runner: Shutting down environment")
