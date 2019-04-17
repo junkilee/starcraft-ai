@@ -104,6 +104,7 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
     def __init__(self, interface):
         self.interface = interface
         self.unit_embedding_size = len(self._get_embedding_columns()) + len(static_data.UNIT_TYPES)
+        self.state_shape = self.interface.state_shape
 
     def get_actions(self):
         return self.interface.get_actions()

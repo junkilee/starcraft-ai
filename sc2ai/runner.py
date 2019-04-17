@@ -13,7 +13,7 @@ def build_agent_interface(map_name):
     if map_name in {'DefeatRoaches', 'StalkersVsRoaches'}:
         return EmbeddingInterfaceWrapper(RoachesEnvironmentInterface())
     elif map_name == 'MoveToBeacon':
-        return BeaconEnvironmentInterface()
+        return EmbeddingInterfaceWrapper(BeaconEnvironmentInterface())
     elif map_name == 'BuildMarines':
         return EmbeddingInterfaceWrapper(TrainMarines())
     else:
@@ -46,7 +46,7 @@ class AgentRunner:
         # Pass into MultipleEnvironment a factory to create SCEnvironments
         self.env = MultipleEnvironment(lambda: SCEnvironmentWrapper(self.agent_interface, self.env_kwargs),
                                        num_parallel_instances=self.runner_params['num_parallel_instances'])
-        self.agent = ConvAgent(self.agent_interface)
+        self.agent = LSTMAgent(self.agent_interface)
 
         # On resets, always load the model
         load_model = True if reset else self.model_params['load_model']
@@ -120,11 +120,11 @@ class AgentRunner:
                                      reward=rewards[i],
                                      done=dones[i])
             agent_states, agent_masks = next_agent_states, next_masks
-            memory = next_masks
+            memory = next_memory
 
         # Add terminal state in rollbacks
         for i in range(num_games):
-            rollouts[i].add_step(state=agent_states[i], memory=memory)
+            rollouts[i].add_step(state=agent_states[i], memory=memory[i])
         return rollouts
 
     # ------------------------ UTILS ------------------------

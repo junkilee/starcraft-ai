@@ -41,12 +41,10 @@ def actor_spatial_head(features, screen_dim, num_spatial_actions, name='actor_sp
     :return:
         Tensor of shape [2, batch_size, screen_dim, num_spatial_actions]
     """
-    print(features.shape)
     with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
         distributions = tf.layers.dense(features,
                                         units=2 * num_spatial_actions * screen_dim,
                                         activation=None)
-    print(distributions.shape)
     return tf.nn.softmax(tf.reshape(distributions, [2, -1, screen_dim, num_spatial_actions]), axis=-2)
 
 

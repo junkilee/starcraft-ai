@@ -102,14 +102,12 @@ class ActorCriticLearner:
         for i in range(self.num_games):
             rollout = rollouts[i]
             if rollout.done:
-                print("tf learner bootstrapstate:", np.array(rollout.bootstrap_state).shape)
                 feed_dict = {
                     self.rewards_input: rollout.rewards,
-                    **self.agent.get_feed_dict(rollout.states,
-                                               rollout.memories,
+                    **self.agent.get_feed_dict(rollout.states + [rollout.bootstrap_state],
+                                               rollout.memories + [rollout.bootstrap_memory],
                                                rollout.masks,
-                                               rollout.actions,
-                                               rollout.bootstrap_state)
+                                               rollout.actions)
                 }
 
                 loss, _ = self.session.run([self.loss, self.train_op], feed_dict=feed_dict)
@@ -133,8 +131,9 @@ class ActorCriticLearner:
         discounts = tf.ones((num_steps, 1)) * self.discount_factor
         rewards = tf.expand_dims(self.rewards_input, axis=1)
 
-        values = tf.expand_dims(self.agent.train_values(), axis=1)
-        bootstrap = tf.expand_dims(self.agent.bootstrap_value(), axis=0)
+        all_values = self.agent.train_values()
+        values = tf.expand_dims(all_values[:-1], axis=1)
+        bootstrap = tf.expand_dims(all_values[-1], axis=0)
         glr = trfl.generalized_lambda_returns(rewards, discounts, values, bootstrap, lambda_=self.td_lambda)
         advantage = tf.squeeze(glr - values)
 
