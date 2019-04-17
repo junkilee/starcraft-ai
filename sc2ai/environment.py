@@ -104,13 +104,13 @@ class MultipleEnvironment:
             process.join()
 
 class SCEnvironmentWrapperGLTL:
-    def __init__(self, interface, env_kwargs):
+    def __init__(self, interface, gltl_expression, proposition_dict, env_kwargs):
         self.env = sc2_env.SC2Env(**env_kwargs)
         self.render = env_kwargs['visualize']
         self.interface = interface
         self.done = False
         self.timestep = None
-        self.mental_state = init # fix
+        self.gltl_mdp = GLTLMDP(gltl_expression, proposition_dict)
         self.num_parallel_instances = 1
 
     def step(self, action_list):
@@ -131,18 +131,23 @@ class SCEnvironmentWrapperGLTL:
             self.timestep = self.env.step([action])[0]
 
             # transition in the GLTL MDP
-            
+            self.gltl_mdp.transition(self.timestep)
+
             # if self.render:
             #     time.sleep(0.15)
 
-            total_reward += self.timestep.reward
-            self.done = int(self.timestep.step_type == StepType.LAST)
+            total_reward += int(self.gltl_mdp.current_state == self.gltl_mdp.acc_state_index)
+            self.done = int(self.is_done())
 
             if self.done:
                 break
 
         state, action_mask = self.interface.convert_state(self.timestep)
         return state, action_mask, total_reward, int(self.done)
+
+    def is_done(self):
+        return (self.gltl_mdp.current_state == self.gltl_mdp.acc_state_index
+            or self.gltl_mdp.current_state == self.gltl_mdp.rej_state_index)
 
     def reset(self):
         timestep = self.env.reset()[0]

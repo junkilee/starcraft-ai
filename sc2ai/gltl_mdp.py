@@ -7,14 +7,14 @@ class GLTLMDP:
     A class representing the mental state of an agent using GLTL. It manages transitions between state based on a list of propositions.
     """
 
-    def __init__(self, expression, propositionDict):
+    def __init__(self, expression, proposition_dict):
         # { 'atBeacon': atBeacon
         # }
 
         self.mdp = gltl_to_mdp(expression)
-        self.propositionDict = propositionDict
-        self.currentState = self.mdp.init
-        self.transitionMatrices = mdp_to_dict_matrix(self.mdp)
+        self.proposition_dict = proposition_dict
+        self.current_ctate = self.mdp.init
+        self.transition_matrices = mdp_to_dict_matrix(self.mdp)
         self.aps = return_ordered_aps(self.mdp)
         self.num_task_states = len(self.mdp["states"])
         self.acc_state_index = next(iter(self.mdp["accept"]))
@@ -22,14 +22,13 @@ class GLTLMDP:
         self.init_state_index = self.mdp["init"]
         self.evaluator = Evaluator()
         # make sure that APs are a subset of proposition dict
-        assert(set(self.aps) in propositionDict)
+        assert(set(self.aps) in proposition_dict)
 
     def transition(self, timestep):
-        results_dict = self.evaluator.get_results_dict(timestep)
-        transitionMatrix = get_next_trans_mat(self.transition_mats_dict, results_dict, self.ordered_aps) # TODO maybe won't work
-        transitionRow = transitionMatrix[self.currentState]
-        self.currentState = np.random.choice(len(transitionRow), p=transitionRow)
-
+        results_dict = {key: self.proposition_dict[key](timestep) for key in self.proposition_dict}
+        transition_matrix = get_next_trans_mat(self.transition_mats_dict, results_dict, self.ordered_aps)
+        transition_row = transition_matrix[self.current_state]
+        self.current_state = np.random.choice(len(transition_row), p=transition_row)
 
 def get_ap_combo_key(classifier_dict, ordered_aps):
     """
