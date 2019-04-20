@@ -84,7 +84,7 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions()])  # [batch, num_actions]
 
         self.action_input = tf.placeholder(tf.int32, [None])  # [T]
-        self.spacial_input = tf.placeholder(tf.int32, [None, 2])  # [T, 2]   dimension size 2 for x and y
+        self.spatial_input = tf.placeholder(tf.int32, [None, 2])  # [T, 2]   dimension size 2 for x and y
         self.unit_selection_input = tf.placeholder(tf.int32, [None], name="unit_selection_input")
 
     def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
@@ -93,10 +93,10 @@ class InterfaceAgent(ActorCriticAgent, ABC):
             self.mask_input: np.array(masks),
         }
         if actions is not None:
-            nonspatial, spacial, _, _ = zip(*[a.as_tuple() for a in actions])
-            spacial = [(-1, -1) if spacial is None else spacial for spacial in spacial]
+            nonspatial, spatial, _, _ = zip(*[a.as_tuple() for a in actions])
+            spatial = [(-1, -1) if spatial is None else spatial for spatial in spatial]
             feed_dict[self.action_input] = np.array(nonspatial)
-            feed_dict[self.spacial_input] = np.array(spacial)
+            feed_dict[self.spatial_input] = np.array(spatial)
         return feed_dict
 
     def _get_chosen_selection_probs(self, selection_probs, selection_choice):
@@ -116,12 +116,12 @@ class InterfaceAgent(ActorCriticAgent, ABC):
 
         result = nonspatial_log_probs
         if spatial_probs is not None:
-            probs_y = self._get_chosen_spacial_prob(spatial_probs[0], self.spacial_input[:, 1])
-            probs_x = self._get_chosen_spacial_prob(spatial_probs[1], self.spacial_input[:, 0])
-            spacial_log_probs = tf.log(probs_x + 1e-10) + tf.log(probs_y + 1e-10)
+            probs_y = self._get_chosen_spatial_prob(spatial_probs[0], self.spatial_input[:, 1])
+            probs_x = self._get_chosen_spatial_prob(spatial_probs[1], self.spatial_input[:, 0])
+            spatial_log_probs = tf.log(probs_x + 1e-10) + tf.log(probs_y + 1e-10)
             result = result + tf.where(self.action_input < self.num_spatial_actions,
-                                       x=spacial_log_probs,
-                                       y=tf.zeros_like(spacial_log_probs))
+                                       x=spatial_log_probs,
+                                       y=tf.zeros_like(spatial_log_probs))
 
         if selection_probs is not None:
             probs_selection = self._get_chosen_selection_probs(selection_probs, self.unit_selection_input)
@@ -133,9 +133,9 @@ class InterfaceAgent(ActorCriticAgent, ABC):
                                        y=tf.zeros_like(selection_log_prob))
         return result
 
-    def _get_chosen_spacial_prob(self, spacial_probs, spacial_choice):
-        spacial_probs = util.index(spacial_probs, spacial_choice)  # [T, num_screen_dimensions]
-        return util.index(spacial_probs, self.action_input % tf.convert_to_tensor(self.num_spatial_actions))  # [T]
+    def _get_chosen_spatial_prob(self, spatial_probs, spatial_choice):
+        spatial_probs = util.index(spatial_probs, spatial_choice)  # [T, num_screen_dimensions]
+        return util.index(spatial_probs, self.action_input % tf.convert_to_tensor(self.num_spatial_actions))  # [T]
 
     def _probs_from_features(self, features):
         nonspatial_probs = parts.actor_nonspatial_head(features, self.mask_input, self.num_actions)
@@ -197,8 +197,8 @@ class LSTMAgent(InterfaceAgent):
         self.train_output = self._lstm_step_train()
         self.all_values = parts.value_head(self.train_output)
 
-        self.nonspatial_probs, self.spacial_probs_x, self.spacial_probs_y = self._probs_from_features(lstm_output)
-        self.nonspatial_train, self.spacial_train_x, self.spacial_train_y = \
+        self.nonspatial_probs, self.spatial_probs_x, self.spatial_probs_y = self._probs_from_features(lstm_output)
+        self.nonspatial_train, self.spatial_train_x, self.spatial_train_y = \
             self._probs_from_features(self.train_output[:-1])
         self.unit_selection_probs = self._selection_probs_from_features(lstm_output, self.unit_embeddings_input)
         self._f1 = lstm_output
@@ -230,16 +230,16 @@ class LSTMAgent(InterfaceAgent):
         }
         results = self.session.run(
             [self.next_lstm_state, self.nonspatial_probs, self.unit_selection_probs,
-             *self.spacial_probs_x, *self.spacial_probs_y], feed_dict)
+             *self.spatial_probs_x, *self.spatial_probs_y], feed_dict)
         next_lstm_state, nonspatial_probs, selection_probs = results[:3]
-        spacial_probs = results[3:]
+        spatial_probs = results[3:]
 
-        spacial_probs_x = spacial_probs[:self.num_screen_dims]
-        spacial_probs_y = spacial_probs[self.num_screen_dims:]
+        spatial_probs_x = spatial_probs[:self.num_screen_dims]
+        spatial_probs_y = spatial_probs[self.num_screen_dims:]
 
         unit_coords = util.pad_stack([state['unit_coords'][:, :2] for state in states], pad_axis=0, stack_axis=0)
-        return self.sample_action_index_with_units(nonspatial_probs, spacial_probs_x,
-                                                   spacial_probs_y, selection_probs, unit_coords), next_lstm_state
+        return self.sample_action_index_with_units(nonspatial_probs, spatial_probs_x,
+                                                   spatial_probs_y, selection_probs, unit_coords), next_lstm_state
 
     def _lstm_step(self):
         state_tuple = tf.unstack(self.memory_input, axis=0)
@@ -270,11 +270,11 @@ class LSTMAgent(InterfaceAgent):
             feed_dict[self.state_input] = screens
 
         if actions is not None:
-            nonspatial, spacials, selection_coords, selection_indices = zip(*[a.as_tuple() for a in actions])
-            spacials = [(13, 27) if spacial is None else spacial for spacial in spacials]
+            nonspatial, spatials, selection_coords, selection_indices = zip(*[a.as_tuple() for a in actions])
+            spatials = [(13, 27) if spatial is None else spatial for spatial in spatials]
             selections = [-1 if selection is None else selection for selection in selection_indices]
             feed_dict[self.action_input] = np.array(nonspatial)
-            feed_dict[self.spacial_input] = np.array(spacials)
+            feed_dict[self.spatial_input] = np.array(spatials)
             feed_dict[self.unit_selection_input] = np.array(selections)
         return feed_dict
 
@@ -285,16 +285,16 @@ class LSTMAgent(InterfaceAgent):
         return self.all_values[:-1]
 
     def train_log_probs(self):
-        return self._train_log_probs_with_units(self.nonspatial_train, self.spacial_train_x, self.spacial_train_y,
+        return self._train_log_probs_with_units(self.nonspatial_train, self.spatial_train_x, self.spatial_train_y,
                                                 self.unit_selection_probs_train)
 
-    def sample_action_index_with_units(self, nonspatial_probs, spacial_probs_x, spacial_probs_y,
+    def sample_action_index_with_units(self, nonspatial_probs, spatial_probs_x, spatial_probs_y,
                                        unit_distribution, unit_coords):
         """
         unit_distribution is an array of shape [num_games, num_select_actions, num_units]
-        :return: Generates an list of action index tuple of type (nonspatial_index, (spacial_x, spacial_y))
+        :return: Generates an list of action index tuple of type (nonspatial_index, (spatial_x, spatial_y))
         """
-        actions = self.sample_action_index(nonspatial_probs, spacial_probs_x, spacial_probs_y)
+        actions = self.sample_action_index(nonspatial_probs, spatial_probs_x, spatial_probs_y)
         num_units = unit_distribution.shape[2]
         new_actions = []
         unit_coords = np.stack(unit_coords)

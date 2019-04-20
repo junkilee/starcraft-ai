@@ -31,9 +31,9 @@ def conv_body(state, filters=(16,), kernel_sizes=(3,), strides=(3,), output_size
 
 def actor_spatial_head(features, screen_dim, num_spatial_actions):
     """
-    Feed forward network to calculate the spacial action probabilities.
+    Feed forward network to calculate the spatial action probabilities.
 
-    :param features: Tensor of shape [batch_size, num_features] inputs to the spacial_head
+    :param features: Tensor of shape [batch_size, num_features] inputs to the spatial_head
     :param screen_dim: Number of units per distribution, corresponds to width / height of screen.
     :param num_spatial_actions: Number of distributions over spatial coordinates for each x, y to produce.
 
@@ -41,7 +41,7 @@ def actor_spatial_head(features, screen_dim, num_spatial_actions):
         Tensor of shape [2, batch_size, screen_dim, num_spatial_actions]
     """
     print(features.shape)
-    with tf.variable_scope('actor_spacial_x', reuse=tf.AUTO_REUSE):
+    with tf.variable_scope('actor_spatial_x', reuse=tf.AUTO_REUSE):
         distributions = tf.layers.dense(features,
                                         units=2 * num_spatial_actions * screen_dim,
                                         activation=None)
