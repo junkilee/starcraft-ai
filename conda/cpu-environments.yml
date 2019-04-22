@@ -1,9 +1,16 @@
-name: ray
+# requires conda>=4.6
+name: sc2gpu
 channels:
   - conda-forge
+  - anaconda
 dependencies:
-  - python=3.6
-  - tensorflow=1.12.0
+  - conda-forge::python=3.6
+  - anaconda::numpy=1.6.2 # mkl version
+  - anaconda::tensorflow=1.12.0
+  - conda-forge::matplotlib=3.0.3
   - pip:
-    - ray[rllib]==0.6.0
-    - matplotlib
+    - pytest==4.4.0
+    - pylint==2.3.1
+    - gym==0.12.1
+    - ray[rllib, debug]==0.6.5
+

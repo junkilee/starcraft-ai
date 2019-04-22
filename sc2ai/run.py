@@ -2,12 +2,11 @@
 """
 import os
 import sys
-from sc2ai.rllib import train
-from sc2ai.rllib import rollout
+from sc2ai.rllib import train,rollout,worker
 
 def run():
     parser = argparse.ArgumentParser(
-        description="Train or Run an RLlib Agent.",
+        description="Train or Run an Starcraft II RLlib Agent.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=EXAMPLE_USAGE)
     subcommand_group = parser.add_subparsers(
@@ -17,13 +16,17 @@ def run():
     # https://github.com/python/cpython/blob/master/Lib/argparse.py
     train_parser = train.create_parser(
         lambda **kwargs: subcommand_group.add_parser("train", **kwargs))
+    worker_parser = worker.create_parser(
+        lambda **kwargs: subcommand_group.add_parser("worker", **kwargs))
     rollout_parser = rollout.create_parser(
         lambda **kwargs: subcommand_group.add_parser("rollout", **kwargs))
     options = parser.parse_args()
 
     if options.command == "train":
         train.run(options, train_parser)
-    elif options.command == "rollout":
+    if options.command == "worker":
+        worker.run(options, worker_parser)
+    elif options.command == "worker":
         rollout.run(options, rollout_parser)
     else:
         parser.print_help()
