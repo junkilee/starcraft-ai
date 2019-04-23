@@ -87,8 +87,9 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         self.unit_selection_input = tf.placeholder(tf.int32, [None], name="unit_selection_input")
 
     def get_feed_dict(self, states, memory, masks, actions=None):
+        screens = [s['screen'] for s in states]
         feed_dict = {
-            self.state_input: np.array(states),
+            self.state_input: np.array(screens),
             self.mask_input: np.array(masks),
         }
         if actions is not None:
@@ -151,7 +152,7 @@ class ConvAgent(InterfaceAgent):
         self.nonspatial_probs, self.spatial_probs = self._probs_from_features(self.features)
 
     def step(self, state, mask, memory):
-        screens = [s['screen'] for s in states]
+        screens = [s['screen'] for s in state]
         nonspatial_probs, spatial_probs = self.session.run(
             [self.nonspatial_probs, self.spatial_probs], {
                 self.state_input: screens,

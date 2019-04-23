@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 python -m sc2ai.train \
---map BuildMarines \
---save_name build-marines1 \
+--map MoveToBeacon \
+--save_name gltl-beacon1 \
 --load_model \
 --step_mul 8 \
 --parallel 2 \
