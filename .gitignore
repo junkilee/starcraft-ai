@@ -124,3 +124,5 @@ archive/
 qsub-out/
 
 bin/download-re*
+vids/
+tboard/

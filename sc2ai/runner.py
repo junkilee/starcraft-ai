@@ -6,6 +6,9 @@ from sc2ai.tflearner.tflearner import ActorCriticLearner, Rollout
 from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
 from sc2ai.env_interface import *
 
+from pysc2.lib.features import PlayerRelative
+
+import skvideo.io
 
 # ------------------------ FACTORIES ------------------------
 
@@ -46,6 +49,7 @@ class AgentRunner:
         # Pass into MultipleEnvironment a factory to create SCEnvironments
         self.env = MultipleEnvironment(lambda: SCEnvironmentWrapper(self.agent_interface, self.env_kwargs),
                                        num_parallel_instances=self.runner_params['num_parallel_instances'])
+
         self.agent = ConvAgent(self.agent_interface)
 
         # On resets, always load the model
@@ -78,6 +82,7 @@ class AgentRunner:
 
             # Train this episode
             self.train_episode()
+            self.episode_count += 1
 
         print("Runner: training fininshed, trained", self.episode_count, "episodes")
         self._close_env()
@@ -93,11 +98,13 @@ class AgentRunner:
             traceback.print_exc()
             self._reset()
 
-    def forward_pass(self):
+    def forward_pass(self, collect_metadata=True):
         """
         Repeatedly generates actions from the agent and steps in the environment until all environments have reached a
         terminal state. Returns each trajectory in the form of rollouts.
         """
+        meta_collector = {}
+
         num_games = self.env.num_parallel_instances
 
         agent_states, agent_masks, _, dones = self.env.reset()
@@ -105,15 +112,24 @@ class AgentRunner:
         memory = None
 
         while not all(dones):
-            agent_actions, memory = self.agent.step(agent_states, agent_masks, memory)
-            env_action_lists = self.agent_interface.convert_actions(agent_actions)
+            agent_input = agent_states[0] # Hack for extractors
+            agent_actions, memory = self.agent.step(agent_input, agent_masks, memory)
+
+            if collect_metadata:
+                for key, frame in self.agent.meta.items():
+                    if key not in meta_collector:
+                        meta_collector[key] = []
+
+                    meta_collector[key].append(frame[0]) # first of batch
+
+            env_action_lists = [self.agent_interface.convert_action(action) for action in agent_actions]
 
             # Feed actions to environment
             next_agent_states, next_masks, rewards, dones = self.env.step(env_action_lists)
 
             # Record info in rollouts
             for i in range(num_games):
-                rollouts[i].add_step(state=agent_states[i],
+                rollouts[i].add_step(state=agent_input[i],
                                      mask=agent_masks[i],
                                      action=agent_actions[i],
                                      reward=rewards[i],
@@ -122,7 +138,57 @@ class AgentRunner:
 
         # Add terminal state in rollbacks
         for i in range(num_games):
-            rollouts[i].add_step(state=agent_states[i])
+            agent_input = agent_states[0] # Hack for extractors
+            rollouts[i].add_step(state=agent_input[i])
+
+        # if collect_metadata:
+        #     # ----- CONV --------
+        #     key = 'meta_final_conv'
+        #     frames = meta_collector[key]
+
+        #     # fix range
+        #     arr = np.array(frames)
+        #     arr_range = np.max(arr) - np.min(arr)
+        #     arr = (arr - np.min(arr)) / arr_range
+
+        #     # to int
+        #     data = (arr * 255).astype(np.uint8)
+        #     # n_frames, xd, yd, n_channels = data.shape
+        #     data = data.transpose(0, 3, 1, 2) 
+        #     _, n_channels, xd, yd = data.shape
+        #     out_x_dim = int(n_channels / 2)
+
+        #     print(data.shape) # (240, 16, 28, 28)
+        #     reshaped = np.concatenate(data.reshape(-1, 2, xd*out_x_dim, yd).transpose(1,3,2,0)).transpose(2,0,1)
+        #     print(reshaped.shape)
+        #     skvideo.io.vwrite('vids/conv-{}.mp4'.format(self.episode_count), 
+        #         reshaped, outputdict={"-pix_fmt":"yuv420p"})
+
+        if collect_metadata:
+            # ----- SPATIAL PROBS --------
+            key = 'meta_spatial_probs'
+            frames = np.array(meta_collector[key])
+            # fix range
+            frames_range = np.max(frames) - np.min(frames)
+            arr = (frames - np.min(frames)) / frames_range
+
+            # data = (arr * 255).astype(np.uint8)
+
+            # print(PlayerRelative)
+            input_states = np.array(meta_collector['meta_state_input']) # [frames,x,y,channels]
+            # input_summed = np.sum(input_states, axis=-1)
+            # input_range = np.max(input_summed) - np.min(input_summed) + 0.01
+            # input_arr = (input_summed - np.min(input_summed)) / input_range
+
+            # print(np.max(input_states), np.min(input_states), np.max(input_summed), np.min(input_summed))
+            # print(input_range)
+            # print(np.max(input_arr), np.min(input_arr))
+
+            three_channel = np.stack([arr, input_states[:,:,:,PlayerRelative.NEUTRAL], input_states[:,:,:,PlayerRelative.SELF]], axis=-1)
+
+            skvideo.io.vwrite('vids/conv-{}.mp4'.format(self.episode_count), 
+                (three_channel * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})
+
         return rollouts
 
     # ------------------------ UTILS ------------------------

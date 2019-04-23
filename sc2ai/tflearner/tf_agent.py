@@ -17,6 +17,8 @@ class ActorCriticAgent(ABC):
         tf.reset_default_graph()
         self.session = tf.Session()
         self.graph = tf.get_default_graph()
+        self.steps = 0
+        self.meta = {} # metadata collected from runs
 
     @abstractmethod
     def step(self, states, masks, memory):
@@ -32,13 +34,6 @@ class ActorCriticAgent(ABC):
                 A list of AgentActions. This will be passed back into self.get_feed_dict during training.
             memory:
                 An arbitrary object that will be passed into step at the next timestep.
-        """
-        pass
-
-    @abstractmethod
-    def bootstrap_value(self):
-        """
-        :return: A scalar tensor representing the bootstrap value.
         """
         pass
 
@@ -59,35 +54,46 @@ class ActorCriticAgent(ABC):
         pass
 
     @abstractmethod
-    def get_feed_dict(self, states, masks, actions, bootstrap_state):
+    def get_feed_dict(self, states, masks, actions):
         """
         Get the feed dict with values for all placeholders that are dependenceies for the tensors
-        `bootstrap_value`, `train_values`, and `train_log_probs`.
+            `train_values`, and `train_log_probs`.
 
-        :param bootstrap_state: A numpy a array of shape [*state_shape] representing the terminal state.
         :param masks: A numpy array of shape [T, num_actions].
         :param states: A numpy array of shape [T, *state_shape].
         :param actions: A list of action indices with length T.
         :return: The feed dict required to evaluate `train_values` and `train_log_probs`
         """
 
+    def variable_summaries(self, var):
+        """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+        with tf.name_scope('summaries'):
+            mean = tf.reduce_mean(var)
+            tf.summary.scalar('mean', mean)
+            with tf.name_scope('stddev'):
+                stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+            tf.summary.scalar('stddev', stddev)
+            tf.summary.scalar('max', tf.reduce_max(var))
+            tf.summary.scalar('min', tf.reduce_min(var))
+            tf.summary.histogram('histogram', var)
 
 class InterfaceAgent(ActorCriticAgent, ABC):
     def __init__(self, interface):
         super().__init__()
         self.interface = interface
-        self.num_actions = self.interface.num_actions()
-        self.num_spatial_actions = self.interface.num_spatial_actions()
-        self.num_select_actions = self.interface.num_select_unit_actions()
-
-        self.state_input = tf.placeholder(tf.float32, [None, *self.interface.state_shape])  # [batch, *state_shape]
-        self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions()])  # [batch, num_actions]
+        self.num_actions = self.interface.num_actions
+        self.num_spatial_actions = self.interface.num_spatial_actions
+        self.num_select_actions = self.interface.num_select_unit_actions
+        input_shape = self.interface.state_shape[0] # Hack to get the extractors working
+        self.state_input = tf.placeholder(tf.float32, [None, *input_shape])  # [batch, *state_shape]
+        print("INPUT", self.state_input)
+        self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions])  # [batch, num_actions]
 
         self.action_input = tf.placeholder(tf.int32, [None])  # [T]
         self.spatial_input = tf.placeholder(tf.int32, [None, 2])  # [T, 2]   dimension size 2 for x and y
         self.unit_selection_input = tf.placeholder(tf.int32, [None], name="unit_selection_input")
 
-    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
+    def get_feed_dict(self, states, masks, actions=None):
         feed_dict = {
             self.state_input: np.array(states),
             self.mask_input: np.array(masks),
@@ -106,7 +112,7 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         :return:
         """
         selection_probs = util.index(selection_probs, selection_choice)  # [T, num_selection_actions]
-        num_selection_actions = self.interface.num_unit_selection_actions
+        num_selection_actions = self.interface.num_select_unit_actions()
 
         index = (self.action_input - self.num_spatial_actions) % tf.convert_to_tensor(num_selection_actions)
         return util.index(selection_probs, index)  # [T]
@@ -138,47 +144,50 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         return util.index(spatial_probs, self.action_input % tf.convert_to_tensor(self.num_spatial_actions))  # [T]
 
     def _probs_from_features(self, features):
-        nonspatial_probs = parts.actor_nonspatial_head(features, self.mask_input, self.num_actions)
-        spatial_probs = parts.actor_spatial_head(features, screen_dim=84, num_spatial_actions=self.num_spatial_actions)
+        num_steps = tf.shape(self.mask_input)[0]
+        nonspatial_probs = parts.actor_nonspatial_head(features[:num_steps], self.mask_input, self.num_actions)
+        spatial_probs = parts.actor_spatial_head(features[:num_steps], screen_dim=84, num_spatial_actions=self.num_spatial_actions)
         return nonspatial_probs, spatial_probs
-
 
 class ConvAgent(InterfaceAgent):
     def __init__(self, interface):
         super().__init__(interface)
-        self.bootstrap_state_input = tf.placeholder(tf.float32, [*self.interface.state_shape])
-        self.features = parts.conv_body(self.state_input)
+        self.features = parts.conv_body(self.state_input, filters=(4,8,), kernel_sizes=(3,3,), strides=(2,2,2,))
         self.nonspatial_probs, self.spatial_probs = self._probs_from_features(self.features)
 
-    def step(self, state, mask, memory):
-        nonspatial_probs, spatial_probs = self.session.run(
-            [self.nonspatial_probs, self.spatial_probs], {
-                self.state_input: state,
-                self.mask_input: mask
-            })
-        return util.sample_action(self.num_spatial_actions, nonspatial_probs, spatial_probs), None
+        self.variable_summaries(self.features)
+        self.merged_summary = tf.summary.merge_all()
+        self.train_writer = tf.summary.FileWriter('tboard/train', self.session.graph)
 
-    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
-        feed_dict = super(ConvAgent, self).get_feed_dict(states, masks, actions, bootstrap_state)
-        return {
-            self.bootstrap_state_input: np.array(bootstrap_state),
-            **feed_dict
-        }
+    def step(self, state, mask, memory):
+        summary, nonspatial_probs, spatial_probs, meta_state_input= self.session.run(
+            [self.merged_summary, self.nonspatial_probs, self.spatial_probs, self.state_input], {
+                self.state_input: state,
+                self.mask_input: mask,
+            })
+
+        self.train_writer.add_summary(summary, self.steps)
+
+        self.meta['meta_state_input'] = meta_state_input # [batch,x,y,channels]
+        # self.meta['meta_final_conv'] = meta_final_conv 
+        x_probs = np.expand_dims(spatial_probs[0,0,:,0], axis=0) #[batch, 84] 
+        y_probs = np.expand_dims(spatial_probs[1,0,:,0], axis=-1) #[84, batch] 
+        self.meta['meta_spatial_probs'] = np.expand_dims(x_probs * y_probs, axis=0)
+        
+        self.steps += 1
+
+        return util.sample_action(self.num_spatial_actions, nonspatial_probs, spatial_probs), None
 
     def train_log_probs(self):
         return self._train_log_probs(self.nonspatial_probs, spatial_probs=self.spatial_probs)
 
-    def bootstrap_value(self):
-        return tf.squeeze(parts.value_head(parts.conv_body(tf.expand_dims(self.bootstrap_state_input, axis=0))), axis=0)
-
     def train_values(self):
         return parts.value_head(self.features)
-
 
 class LSTMAgent(InterfaceAgent):
     def __init__(self, interface):
         super().__init__(interface)
-        self.num_select_actions = self.interface.num_unit_selection_actions
+        self.num_select_actions = self.interface.num_select_unit_actions
 
         self.rnn_size = 256
         self.self_attention = SelfAttention(hidden_size=128, num_heads=2, attention_dropout=0, train=True)
@@ -253,7 +262,7 @@ class LSTMAgent(InterfaceAgent):
         train_output, _ = tf.nn.dynamic_rnn(self.lstm, flattened_state, dtype=tf.float32)
         return tf.squeeze(train_output, axis=0)
 
-    def get_feed_dict(self, states, masks, actions=None, bootstrap_state=None):
+    def get_feed_dict(self, states, masks, actions=None):
         screens = np.stack([state['screen'] for state in states], axis=0)
         feed_dict = {
             self.state_input: np.array(states),

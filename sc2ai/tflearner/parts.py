@@ -15,10 +15,11 @@ def conv_body(state, filters=(16,), kernel_sizes=(3,), strides=(3,), output_size
     :return: A tensor of shape [batch_size, output_size]
     """
     architecture = list(zip(range(len(filters)), filters, kernel_sizes, strides))
-
-    logits = tf.transpose(state, [0, 3, 2, 1])  # Transpose into channels last format
+    logits = state
+    # logits = tf.transpose(state, [0, 3, 2, 1])  # Transpose into channels last format
     with tf.variable_scope('ac_shared', reuse=tf.AUTO_REUSE):
         for i, filters, kernel_size, strides in architecture:
+            print("LOGITS", logits)
             logits = tf.layers.conv2d(logits, filters, kernel_size, strides, activation=tf.nn.leaky_relu,
                                       kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
                                       name='conv%d' % i)
