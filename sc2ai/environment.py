@@ -110,7 +110,9 @@ class SCEnvironmentWrapperGLTL:
         self.interface = interface
         self.done = False
         self.timestep = None
-        self.gltl_mdp = GLTLMDP(gltl_expression, proposition_dict)
+        self.gltl_expression = gltl_expression
+        self.proposition_dict = proposition_dict
+        self.gltl_mdp = GLTLMDP(self.gltl_expression, self.proposition_dict)
         self.num_parallel_instances = 1
 
     def step(self, action_list):
@@ -151,6 +153,7 @@ class SCEnvironmentWrapperGLTL:
 
     def reset(self):
         timestep = self.env.reset()[0]
+        self.gltl_mdp = GLTLMDP(self.gltl_expression, self.proposition_dict)
         state, action_mask = self.interface.convert_state(timestep)
         self.timestep = timestep
         self.done = False
