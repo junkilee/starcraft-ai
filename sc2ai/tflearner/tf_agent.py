@@ -76,11 +76,14 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         self.num_spatial_actions = self.interface.num_spatial_actions()
         self.num_select_actions = self.interface.num_select_unit_actions()
 
-        self.state_input = tf.placeholder(tf.float32, [None, *self.interface.state_shape], name='state_input')  # [batch, *state_shape]
-        self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions()], name='mask_input')  # [batch, num_actions]
+        self.state_input = tf.placeholder(tf.float32, [None, *self.interface.state_shape],
+                                          name='state_input')  # [batch, *state_shape]
+        self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions()],
+                                         name='mask_input')  # [batch, num_actions]
 
         self.action_input = tf.placeholder(tf.int32, [None], name='action_input')  # [T]
-        self.spacial_input = tf.placeholder(tf.int32, [None, 2], name='spatial_input')  # [T, 2]   dimension size 2 for x and y
+        self.spacial_input = tf.placeholder(tf.int32, [None, 2],
+                                            name='spatial_input')  # [T, 2]   dimension size 2 for x and y
         self.unit_selection_input = tf.placeholder(tf.int32, [None], name="unit_selection_input")
 
     def get_feed_dict(self, states, memory, masks, actions=None):
@@ -136,7 +139,8 @@ class InterfaceAgent(ActorCriticAgent, ABC):
     def _probs_from_features(self, features):
         num_steps = tf.shape(self.mask_input)[0]
         nonspatial_probs = parts.actor_nonspatial_head(features[:num_steps], self.mask_input, self.num_actions)
-        spatial_probs = parts.actor_spatial_head(features[:num_steps], screen_dim=84, num_spatial_actions=self.num_spatial_actions)
+        spatial_probs = parts.actor_spatial_head(features[:num_steps], screen_dim=84,
+                                                 num_spatial_actions=self.num_spatial_actions)
         return nonspatial_probs, spatial_probs
 
 
@@ -147,12 +151,13 @@ class ConvAgent(InterfaceAgent):
         self.nonspatial_probs, self.spatial_probs = self._probs_from_features(self.features)
 
     def step(self, state, mask, memory):
+        screens = [s['screen'] for s in states]
         nonspatial_probs, spatial_probs = self.session.run(
             [self.nonspatial_probs, self.spatial_probs], {
-                self.state_input: state,
+                self.state_input: screens,
                 self.mask_input: mask
             })
-        return util.sample_action(self.interface, nonspatial_probs, spatial_probs), None
+        return util.sample_action(self.interface, nonspatial_probs, spatial_probs), self.get_initial_memory(len(screens))
 
     def train_log_probs(self):
         return self._train_log_probs(self.nonspatial_probs, spatial_probs=self.spatial_probs)
@@ -172,7 +177,7 @@ class LSTMAgent(InterfaceAgent):
 
         self.lstm_memory_input = tf.placeholder(tf.float32, [2, None, self.rnn_size], name="memory_input")
         self.unit_embeddings_input = tf.placeholder(tf.float32, [None, None, self.interface.unit_embedding_size],
-                                                    name="unit_embeddings_input") # [batch, num_units, embed_size]
+                                                    name="unit_embeddings_input")  # [batch, num_units, embed_size]
         self.unit_selection_input = tf.placeholder(tf.int32, [None], name="unit_selection_input")
         self.prev_action_input = tf.placeholder(tf.int32, [None], name='prev_action_input')  # TODO: Implement this
         self.gltl_state = tf.placeholder(tf.int32, [None], name='gltl_state')
@@ -216,7 +221,8 @@ class LSTMAgent(InterfaceAgent):
         new_memory = [(next_lstm_state[:, i, :], self.next_mental_state(states[i], memory[i][1]))
                       for i in range(len(states))]
         unit_coords = util.pad_stack([state['unit_coords'][:, :2] for state in states], pad_axis=0, stack_axis=0)
-        return util.sample_action(self.interface, nonspacial_probs, spatial_probs, selection_probs, unit_coords), new_memory
+        return util.sample_action(self.interface, nonspacial_probs, spatial_probs, selection_probs,
+                                  unit_coords), new_memory
 
     def get_feed_dict(self, states, memories, masks, actions=None):
         """

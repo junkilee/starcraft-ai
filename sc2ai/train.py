@@ -10,7 +10,6 @@ from pysc2.maps import lib
 
 import sc2ai.env_interface as interfaces
 from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
-from sc2ai.tflearner.gltl_agent import GLTLLSTMAgent
 from sc2ai.tflearner.tflearner import ActorCriticLearner
 from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
 from sc2ai.runner import AgentRunner
