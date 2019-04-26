@@ -44,16 +44,23 @@ class ObservationFilter(ABC):
 
 
 class PlayerRelativeLocationMap(ObservationFilter):
+    """
+
+    """
     def __init__(self, **kwargs):
         super().__init(**kwargs)
 
-    def filter(selfself, observation):
+    def filter(self, observation):
         pass
 
 
 class SelfUnitLocations(ObservationFilter):
+    """
+
+    """
     def __init__(self, **kwargs):
         super().__init(**kwargs)
 
-    def filter(selfself, observation):
+    def filter(self, observation):
+
         pass

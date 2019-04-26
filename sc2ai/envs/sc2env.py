@@ -40,7 +40,7 @@ def make_sc2env(**kwargs):
 
     return gym.make(cls(**kwargs))
 
-class SC2Env(gym.Env):
+class SingleAgentSC2Env(gym.Env):
     """A gym wrapper for PySC2's Starcraft II environment.
 
     Args:
@@ -155,26 +155,27 @@ class SC2Env(gym.Env):
             action = [ActionIDs.NO_OP]
 
         try:
-            obs = self._sc2_env.step([actions.FunctionCall(action[0], action[1:])])[0]
+            # Only observing the first player's timestep
+            timestep = self._sc2_env.step([actions.FunctionCall(action[0], action[1:])])[0]
         except KeyboardInterrupt:
             logging.info("Keyboard Interruption.")
             return None, 0, True, {}
         except Exception:
             logging.exception("An unexpected exception occured.")
             return None, 0, True, {}
-        self._available_actions = obs.observation['available_actions']
-        reward = obs.reward
-        return obs, reward, obs.step_type == StepType.LAST, {}
+        self._available_actions = timestep.observation['available_actions']
+        reward = timestep.reward
+        return timestep.observation, reward, timestep.step_type == StepType.LAST, {}
 
     def reset(self):
         if self._sc2_env is None:
             self._init_sc2_env()
         obs = self._sc2_env.reset()[0]
         self._available_actions = obs.observation['available_actions']
-        return obs
+        return obs.observation
 
 
-class MiniGameEnv(SC2Env):
+class SingleAgentMiniGameEnv(SingleAgentSC2Env):
     """Providing a wrapper for minigames. Mainly supports preprocessing of both reward and observation.
 
     Args:
@@ -186,7 +187,7 @@ class MiniGameEnv(SC2Env):
         super().__init__(map_name, **kwargs)
 
     def _reset(self):
-        obs = super()._reset()
+        timestep = super()._reset()
         return self._process_observation(self, obs)
 
     def _step(self, action):
@@ -201,7 +202,7 @@ class MiniGameEnv(SC2Env):
     def _process_observation(self, raw_obs):
         raise NotImplementedError
 
-class MultiStepMiniGameEnv(SC2Env):
+class MultiStepSingleAgentMiniGameEnv(SingleAgentMiniGameEnv):
     """
     Instead of taking one action per step, it handles a list of consecutive actions.
     """
