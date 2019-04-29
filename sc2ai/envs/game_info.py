@@ -3,9 +3,8 @@ from pysc2.lib import actions
 from pysc2.lib import features
 from collections import namedtuple
 
-screen_size = 84
-minimap_size = 64
-
+feature_screen_size = 84
+feature_minimap_size = 64
 
 SC2EnvOptions = namedtuple('SC2EnvOptions', ('render', 'feature_screen_size', 'feature_minimap_size',
                                              'rgb_screen_size', 'rgb_minimap_size', 'action_space',
@@ -14,11 +13,11 @@ SC2EnvOptions = namedtuple('SC2EnvOptions', ('render', 'feature_screen_size', 'f
                                              'step_mul',
                                              'agent1_name', 'agent1_race', 'agent2_name', 'agent2_race',
                                              'difficulty', 'profile', 'trace', 'parallel', 'save_replay'))
-""" The definition of SC2EnvOptions """
 
+""" The definition of SC2EnvOptions """
 default_env_options = SC2EnvOptions(render=False,
-                                    feature_screen_size=screen_size,
-                                    feature_minimap_size=minimap_size,
+                                    feature_screen_size=feature_screen_size,
+                                    feature_minimap_size=feature_minimap_size,
                                     rgb_screen_size=None,
                                     rgb_minimap_size=None,
                                     action_space=sc2_env.ActionSpace.FEATURES,

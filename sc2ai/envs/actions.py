@@ -2,14 +2,13 @@ from pysc2.lib import actions as pysc2_actions
 from abc import ABC, abstractmethod
 
 class ActionList():
-    """
-
-    """
-    def __init__(self, actionlist):
-        pass
+    """Stores a action list for an environment."""
+    def __init__(self, actions_list):
+        self.actions_list = actions_list
 
     def convert_to_gym_action_spaces(actionlist):
-        registered
+        vectors = []
+
 
         for action in actionlist:
             pass
@@ -20,10 +19,7 @@ class ActionList():
 
 
 class Action(ABC):
-    """
-    An abstract class for a default action which relies only on the policy network's output
-
-    """
+    """An abstract class for a default action which relies only on the policy network's output"""
     def __init__(self, function_type, **kwargs):
         self.function_type = function_type
         self.default_arguments = kwargs
@@ -55,6 +51,9 @@ class HighLevelAction(Action):
 
 
 def SelectAction(Action):
+    def __init__(self, function_type, **kwargs):
+        super().__init__(function_type, **kwargs)
+
     def __call__(self):
         return
 
