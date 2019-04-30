@@ -114,7 +114,7 @@ class EmbeddingInterfaceWrapper(EnvironmentInterface):
 
     def _get_unit_embeddings(self, timestep, useful_columns):
         unit_info = np.array(timestep.observation.feature_units)
-        if unit_info.shape[0] == 0:
+        if True or unit_info.shape[0] == 0:  # TODO: Undo that
             # Set to 1 instead of 0 so no empty embedding situation. Zeros are treated as masked so this is okay.
             return np.zeros((1, self.unit_embedding_size))
         adjusted_info = unit_info[:, np.array(useful_columns)]
@@ -294,59 +294,11 @@ class TrainMarines(RoachesEnvironmentInterface):
         return np.stack([none, neutral, player], axis=0), cls._get_action_mask(timestep)
 
 
-class BanelingsEnvironmentInterface(RoachesEnvironmentInterface):
-    state_shape = [3, 84, 84]
-    screen_dimensions = [84, 84, 84, 84, 84, 84]
-    num_actions = 4
-
-    @classmethod
-    def _get_action_mask(cls, timestep):
-        mask = np.ones([cls.num_actions])
-        if pysc2_actions.FUNCTIONS.Attack_screen.id not in timestep.observation.available_actions:
-            mask[0] = 0
-            mask[1] = 0
-        return mask
-
-    @classmethod
-    def _sacrifice_action(cls, x, y):
-        yield
-        timestep = yield pysc2_actions.FUNCTIONS.select_point('select', (x, y))
-        if len(timestep.observation.multi_select) == 0:
-            if pysc2_actions.FUNCTIONS.Move_screen.id in timestep.observation.available_actions:
-                center_allies = cls._get_center_of_mass(timestep, PlayerRelative.SELF)
-                center_enemies = cls._get_center_of_mass(timestep, PlayerRelative.ENEMY)
-                if center_enemies is not None and center_allies is not None:
-                    direction = center_allies - center_enemies
-                    target = [x, y] - 10 * direction
-                    target = np.clip(target, a_min=0, a_max=83)
-                    yield pysc2_actions.FUNCTIONS.Move_screen('now', target)
-        yield
-
-    @classmethod
-    def convert_action(cls, action):
-        action_index, coords = action
-        coords = coords if coords is not None else (9, 14)
-        actions = [
-            cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', coords)]),
-            cls._make_generator([pysc2_actions.FUNCTIONS.Move_screen('now', coords)]),
-            cls._sacrifice_action(*coords),
-            cls._make_generator([pysc2_actions.FUNCTIONS.select_army('select')])
-        ]
-        return actions[action_index]
-
-    @classmethod
-    def convert_state(cls, timestep):
-        feature_screen = timestep.observation.feature_screen
-        beacon = (np.array(feature_screen.player_relative) == PlayerRelative.ENEMY).astype(np.float32)
-        player = (np.array(feature_screen.player_relative) == PlayerRelative.SELF).astype(np.float32)
-        health = np.array(feature_screen.unit_hit_points).astype(np.float32)
-        return np.stack([beacon, player, health], axis=0), cls._get_action_mask(timestep)
-
-
 class BeaconEnvironmentInterface(EnvironmentInterface):
     state_shape = [2, 84, 84]
-    screen_dimensions = [84, 84]
-    num_actions = 2
+    num_actions = 3
+    screen_dimensions = [84, 84] * 1
+    num_unit_selection_actions = 1
 
     @classmethod
     def _get_action_mask(cls, timestep):
@@ -357,10 +309,14 @@ class BeaconEnvironmentInterface(EnvironmentInterface):
 
     @classmethod
     def convert_action(cls, action):
-        action_index, coords = action
-        coords = coords if coords is not None else (9, 14)
+        action_index, coords, selection_coords, selection_index = action
+        coords = coords if coords is not None else (-1, -1)
+        selection_coords = selection_coords if selection_coords is not None else (-1, -1)
+        selection_coords = np.clip(selection_coords, a_min=0, a_max=83)
+
         actions = [
             cls._make_generator([pysc2_actions.FUNCTIONS.Attack_screen('now', coords)]),
+            cls._make_generator([pysc2_actions.FUNCTIONS.select_point('select', selection_coords)]),
             cls._make_generator([pysc2_actions.FUNCTIONS.select_army('select')])
         ]
         return actions[action_index]
