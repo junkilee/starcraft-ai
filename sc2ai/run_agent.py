@@ -7,8 +7,9 @@ from pysc2.env import sc2_env
 from pysc2.lib import point_flag
 from pysc2.maps import lib
 
+from sc2ai.tflearner.evaluator import Evaluator
 import sc2ai.env_interface as interfaces
-from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
+from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper, SCEnvironmentWrapperGLTL
 from sc2ai.tflearner.tflearner import ActorCriticLearner
 from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
 
@@ -108,7 +109,15 @@ def main(unused_argv):
     load_model = FLAGS.load_model
     while True:
         num_instances = 1 if FLAGS.render else FLAGS.parallel
-        environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
+        # environment = MultipleEnvironment(lambda: SCEnvironmentWrapper(interface, env_kwargs),
+        #                                   num_instance=num_instances)
+        proposition_map = {
+            "atbeacon": lambda timestep: Evaluator.at_beacon(timestep)
+        }
+        environment = MultipleEnvironment(lambda: SCEnvironmentWrapperGLTL(interface,
+                                                                           "F_{0.1}atbeacon",
+                                                                           proposition_map,
+                                                                           env_kwargs),
                                           num_instance=num_instances)
         agent = LSTMAgent(interface)
         learner = ActorCriticLearner(environment, agent,
