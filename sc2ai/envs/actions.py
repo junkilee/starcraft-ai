@@ -1,4 +1,4 @@
-from pysc2.lib import actions as pysc2_actions
+from pysc2.lib import actions
 from abc import ABC, abstractmethod
 
 class ActionList():
@@ -6,9 +6,24 @@ class ActionList():
     def __init__(self, actions_list):
         self.actions_list = actions_list
 
-    def convert_to_gym_action_spaces(actionlist):
+        for i, action in enumerate(self.actions_list):
+            action.register_action_id(i)
+
+        self.num_actions = len(actions_list)
+        self.current_num_actions = self.num_actions
+
+    @classmethod
+    def add_all_sc2_actions(cls):
+        raise NotImplementedError()
+
+    def update_available_actions(self, available_actions):
+
+
+
+    def convert_to_gym_action_spaces(self, actionlist):
         vectors = []
 
+        vectors.add(self.num_actions)
 
         for action in actionlist:
             pass
@@ -20,13 +35,13 @@ class ActionList():
 
 class Action(ABC):
     """An abstract class for a default action which relies only on the policy network's output"""
-    def __init__(self, function_type, **kwargs):
+    def __init__(self, function_type, arg_types, **kwargs):
         self.function_type = function_type
         self.default_arguments = kwargs
+        self.arg_types = arg_types
+        self.action_id = None
 
-    def __call__(self, action_values):
 
-        return
 
     @abstractmethod
     def parameter_type(self):
@@ -38,8 +53,8 @@ class HighLevelAction(Action):
     output itself
 
     """
-    def __init__(self, function_type, **kwargs):
-        super().__init__(function_type, **kwargs)
+    def __init__(self, function_type, arg_types, **kwargs):
+        super().__init__(function_type, arg_types, **kwargs)
 
     def __call__(self, action_values):
 
@@ -53,6 +68,7 @@ class HighLevelAction(Action):
 def SelectAction(Action):
     def __init__(self, function_type, **kwargs):
         super().__init__(function_type, **kwargs)
+        self.arg_types = []
 
     def __call__(self):
         return
