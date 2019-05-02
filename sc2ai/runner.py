@@ -3,7 +3,7 @@ import os
 
 from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
 from sc2ai.tflearner.tflearner import ActorCriticLearner, Rollout
-from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent, LSTMAgent
+from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent
 from sc2ai.env_interface import *
 
 from pysc2.lib.features import PlayerRelative
@@ -96,7 +96,8 @@ class AgentRunner:
         except Exception as e:
             print("Runner: Encountered error in train_episode:", e)
             traceback.print_exc()
-            self._reset()
+            self._close_env()
+            # self._reset()
 
     def forward_pass(self, collect_metadata=True):
         """
@@ -107,39 +108,36 @@ class AgentRunner:
 
         num_games = self.env.num_parallel_instances
 
-        agent_states, agent_masks, _, dones = self.env.reset()
+        agent_features, agent_masks, _, dones = self.env.reset()
         rollouts = [Rollout() for _ in range(num_games)]
         memory = None
 
         while not all(dones):
-            agent_input = agent_states[0] # Hack for extractors
-            agent_actions, memory = self.agent.step(agent_input, agent_masks, memory)
+            agent_actions, memory = self.agent.step(agent_features, agent_masks, memory)
 
             if collect_metadata:
                 for key, frame in self.agent.meta.items():
                     if key not in meta_collector:
                         meta_collector[key] = []
-
                     meta_collector[key].append(frame[0]) # first of batch
 
-            env_action_lists = [self.agent_interface.convert_action(action) for action in agent_actions]
+            env_action_lists = [self.agent_interface.to_env_action(act) for act in agent_actions]
 
             # Feed actions to environment
-            next_agent_states, next_masks, rewards, dones = self.env.step(env_action_lists)
+            next_agent_features, next_masks, rewards, dones = self.env.step(env_action_lists)
 
             # Record info in rollouts
             for i in range(num_games):
-                rollouts[i].add_step(state=agent_input[i],
+                rollouts[i].add_step(feature=agent_features[i],
                                      mask=agent_masks[i],
                                      action=agent_actions[i],
                                      reward=rewards[i],
                                      done=dones[i])
-            agent_states, agent_masks = next_agent_states, next_masks
+            agent_features, agent_masks = next_agent_features, next_masks
 
         # Add terminal state in rollbacks
         for i in range(num_games):
-            agent_input = agent_states[0] # Hack for extractors
-            rollouts[i].add_step(state=agent_input[i])
+            rollouts[i].add_step(feature=agent_features[i])
 
         # if collect_metadata:
         #     # ----- CONV --------
@@ -175,7 +173,7 @@ class AgentRunner:
             # data = (arr * 255).astype(np.uint8)
 
             # print(PlayerRelative)
-            input_states = np.array(meta_collector['meta_state_input']) # [frames,x,y,channels]
+            input_states = np.array(meta_collector['meta_map_features']) # [frames,x,y,channels]
             # input_summed = np.sum(input_states, axis=-1)
             # input_range = np.max(input_summed) - np.min(input_summed) + 0.01
             # input_arr = (input_summed - np.min(input_summed)) / input_range

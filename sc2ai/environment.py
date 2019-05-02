@@ -18,7 +18,7 @@ class SCEnvironmentWrapper:
         :param action_list:
             List of pysc2 actions.
         :return:
-            env_state: The state resulting after the action has been taken.
+            agent_features: The features extracted from the new env_state after the action has been taken.
             total_reward: The accumulated reward from the environment
             done: Whether the action resulted in the environment reaching a terminal state.
         """
@@ -29,8 +29,6 @@ class SCEnvironmentWrapper:
         total_reward = 0
         for action in action_list:
             self.timestep = self.env.step([action])[0]
-            # if self.render:
-            #     time.sleep(0.15)
 
             total_reward += self.timestep.reward
             self.done = int(self.timestep.step_type == StepType.LAST)
@@ -38,15 +36,15 @@ class SCEnvironmentWrapper:
             if self.done:
                 break
 
-        state, action_mask = self.interface.convert_state(self.timestep)
-        return state, action_mask, total_reward, int(self.done)
+        agent_features, action_mask = self.interface.to_features(self.timestep)
+        return agent_features, action_mask, total_reward, int(self.done)
 
     def reset(self):
         timestep = self.env.reset()[0]
-        state, action_mask = self.interface.convert_state(timestep)
+        agent_features, action_mask = self.interface.to_features(timestep)
         self.timestep = timestep
         self.done = False
-        return state, action_mask,  0, int(self.done)
+        return agent_features, action_mask,  0, int(self.done)
 
     def close(self):
         self.env.__exit__(None, None, None)
