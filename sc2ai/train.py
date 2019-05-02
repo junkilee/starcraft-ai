@@ -53,7 +53,7 @@ if __name__ == '__main__':
 
 def log_run_config(save_dir):
     # Log all flags to {save_dir}/info.txt
-    print(save_dir)
+    print("DEBUG: Saving to:", save_dir)
     os.makedirs(save_dir, exist_ok=True)
     run_info_path = os.path.join(save_dir, 'info.txt')
 

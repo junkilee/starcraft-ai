@@ -88,7 +88,7 @@ class InterfaceAgent(ActorCriticAgent, ABC):
 
         # Used in forward pass
         self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions], name="mask_input")  # [batch, num_actions]
-        self.map_features = tf.placeholder(tf.float32, [None, *self.interface.state_shape[MapFeature]], name="map_features") # [batch, *map_features.shape]
+        self.map_features = tf.placeholder(tf.float32, [None, *self.interface.features_shape[MapFeature]], name="map_features") # [batch, *map_features.shape]
 
         # self.state_input = tf.placeholder(tf.float32, [None, *input_shape])  # [batch, *state_shape]
 

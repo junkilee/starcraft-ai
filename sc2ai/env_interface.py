@@ -62,10 +62,15 @@ class EnvironmentInterface(ABC):
         self.feature_collection = FeatureCollection(self._features())
         self.actions = self._actions()
 
+        print("DEBUG: Initializing interface with:\n \
+            \tfeatures:", self.feature_collection.shape(), "\n \
+            \tactions:", [a.get_id() for a in self.actions], "\n \
+        ")
+
         self.num_actions = len(self.actions)
         self.num_spatial_actions = len([action for action in self.actions if isinstance(action, SpatialEnvAction)])
         self.num_select_unit_actions = len([action for action in self.actions if isinstance(action, SelectUnitEnvAction)])
-        self.state_shape = self._state_shape()
+        self.features_shape =self.feature_collection.shape()
 
     # ---------- Action ----------
 
@@ -85,27 +90,20 @@ class EnvironmentInterface(ABC):
         state = self.feature_collection.dummy_state()
         return state, np.ones(self.num_actions)
 
-    def _state_shape(self):
-        return self.feature_collection.shape()
-
     def to_features(self, timestep):
-        """
-        :param timestep: Timestep obtained from pysc2 environment step.
-        :return: Tuple of converted state (shape self.state_shape) and action mask
-        """
-        extracted_features = self.feature_collection.extract_from_state(timestep)
-        return extracted_features, self._get_action_mask(timestep)
+        """ return Tuple of (features, action mask) """
+        return self.feature_collection.extract_from_state(timestep), self._get_action_mask(timestep)
 
     # ------------------ overrides ------------------
     
     @abstractmethod
-    def _features(self):
-        """ List[BaseAgentFeature] """
+    def _actions(self):
+        """ List[BaseEnvAction] """
         pass
 
     @abstractmethod
-    def _actions(self):
-        """ List[BaseEnvAction] """
+    def _features(self):
+        """ List[BaseAgentFeature] """
         pass
 
 class RoachesEnvironmentInterface(EnvironmentInterface):
@@ -124,7 +122,7 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
     def _features(self):
         return [
             PlayerRelativeMapFeature(),
-            HealthMapExtractor(),
+            HealthMapFeature(),
         ]
 
 class TrainMarines(RoachesEnvironmentInterface):
