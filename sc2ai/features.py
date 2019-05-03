@@ -31,8 +31,8 @@ class MapFeature(BaseAgentFeature, ABC):
     def shape(self): # override
         return [84,84, self._num_channels()]
 
-    def _channels_last(self, arr): # Input: [channel, x, y]
-        return arr.transpose([1, 2, 0]) # Output: [x, y, channel]
+    def _channels_last(self, arr): # Input: [channel, y, x]
+        return arr.transpose([1, 2, 0]) # Output: [y, x, channel]
 
 # ------------------------ Collection ------------------------
 
@@ -169,32 +169,3 @@ class UnitTypeExtractor(FeatureUnitExtractor):
         one_hot_unit_types = np.eye(num_unit_types)[pysc2_unit_type]
 
         return one_hot_unit_types
-
-# class PlayerRelativeMapExtractor(StateExtractor):
-    
-#     """ @override """
-#     def convert_state(self, timestep):
-#         player_relative = np.array(timestep.observation.feature_screen.player_relative)
-#         relative_maps = [(player_relative == player).astype(np.float32) for player in PlayerRelative]
-#         return channels_first(np.stack(relative_maps, axis=0))
-
-#     """ @override """
-#     def shape(self):
-#         # [84, 84, players]
-#         return [84,84] + [len(PlayerRelative)]
-
-# class HealthMapExtractor(StateExtractor):
-    
-#     """ @override """
-#     def convert_state(self, timestep):
-#         health = np.array(timestep.observation.feature_screen.unit_hit_points).astype(np.float32)
-#         return channels_first(np.stack([health], axis=0))
-
-#     """ @override """
-#     def shape(self):
-#         # [84, 84, 1]
-#         return [84, 84, 1]
-
-
-# def channels_first(arr): # [channel, x, y]
-#     return arr.transpose([1, 2, 0])

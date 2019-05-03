@@ -88,9 +88,9 @@ class InterfaceAgent(ActorCriticAgent, ABC):
 
         # Used in forward pass
         self.mask_input = tf.placeholder(tf.float32, [None, self.interface.num_actions], name="mask_input")  # [batch, num_actions]
+        
+        # Features from state
         self.map_features = tf.placeholder(tf.float32, [None, *self.interface.features_shape[MapFeature]], name="map_features") # [batch, *map_features.shape]
-
-        # self.state_input = tf.placeholder(tf.float32, [None, *input_shape])  # [batch, *state_shape]
 
         # Used in backward pass
         self.action_input = tf.placeholder(tf.int32, [None], name="action_input")  # [T]
@@ -151,19 +151,23 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         spatial_probs = util.index(spatial_probs, spatial_choice)  # [T, num_screen_dimensions]
         return util.index(spatial_probs, self.action_input % tf.convert_to_tensor(self.num_spatial_actions))  # [T]
 
-    def _probs_from_features(self, features):
-        num_steps = tf.shape(self.mask_input)[0]
-        nonspatial_probs = parts.actor_nonspatial_head(features[:num_steps], self.mask_input, self.num_actions)
-        spatial_probs = parts.actor_spatial_head(features[:num_steps], screen_dim=84, num_spatial_actions=self.num_spatial_actions)
+    def _probs_from_features(self, features, from_conv=False):
+        num_steps = tf.shape(self.mask_input)[0] # I think this removes the extra bootstrapped states?
+        nonspatial_probs = parts.actor_nonspatial_head(features[:num_steps], \
+            self.mask_input, self.num_actions, from_conv=from_conv)
+        spatial_probs, self.last_spatial_conv = parts.actor_spatial_head(features[:num_steps], screen_dim=84, \
+            num_spatial_actions=self.num_spatial_actions, from_conv=from_conv)
+        
         return nonspatial_probs, spatial_probs
 
 class ConvAgent(InterfaceAgent):
     def __init__(self, interface):
         super().__init__(interface)
-        self.features = parts.conv_body(self.map_features, filters=(4,8,), kernel_sizes=(3,3,), strides=(2,2,2,))
-        self.nonspatial_probs, self.spatial_probs = self._probs_from_features(self.features)
+        self.features = parts.conv_body(self.map_features, filters=(4,), kernel_sizes=(3,), strides=(3,))
+        self.nonspatial_probs, self.spatial_probs = self._probs_from_features(self.features, from_conv=True)
 
-        self.variable_summaries(self.features)
+        # Summaries for tensorboard
+        self.variable_summaries(self.map_features)
         self.merged_summary = tf.summary.merge_all()
         self.train_writer = tf.summary.FileWriter('tboard/train', self.session.graph)
 
@@ -171,16 +175,17 @@ class ConvAgent(InterfaceAgent):
         # Collect features across batch
         map_features = np.stack([f[MapFeature] for f in features], axis=0)
 
-        summary, nonspatial_probs, spatial_probs, meta_map_features= self.session.run(
-            [self.merged_summary, self.nonspatial_probs, self.spatial_probs, self.map_features], {
+        summary, nonspatial_probs, spatial_probs, meta_map_features, meta_conv_body_output, meta_spatial_2d = self.session.run(
+            [self.merged_summary, self.nonspatial_probs, self.spatial_probs, self.map_features, self.features, self.last_spatial_conv], {
                 self.map_features: map_features,
                 self.mask_input: mask,
             })
 
         self.train_writer.add_summary(summary, self.steps)
 
-        self.meta['meta_map_features'] = meta_map_features # [batch,x,y,channels]
-        # self.meta['meta_final_conv'] = meta_final_conv 
+        self.meta['meta_map_features'] = meta_map_features # [batch,y,x,channels]
+        self.meta['meta_conv_body_output'] = meta_conv_body_output # [batch, y,x,channels]
+        self.meta['meta_spatial_2d'] = meta_spatial_2d # [batch, y,x,channels]
         x_probs = np.expand_dims(spatial_probs[0,0,:,0], axis=0) #[batch, 84] 
         y_probs = np.expand_dims(spatial_probs[1,0,:,0], axis=-1) #[84, batch] 
         self.meta['meta_spatial_probs'] = np.expand_dims(x_probs * y_probs, axis=0)
@@ -193,7 +198,7 @@ class ConvAgent(InterfaceAgent):
         return self._train_log_probs(self.nonspatial_probs, spatial_probs=self.spatial_probs)
 
     def train_values(self):
-        return parts.value_head(self.features)
+        return parts.value_head(self.features, from_conv=True)
 
 # class LSTMAgent(InterfaceAgent):
 #     def __init__(self, interface):
@@ -229,7 +234,7 @@ class ConvAgent(InterfaceAgent):
 #         return parts.actor_pointer_head(features, embeddings, self.num_select_actions)
 
 #     def features(self):
-#         conv_features = parts.conv_body(self.state_input)
+#         conv_features = parts.conv_body_with_dense(self.state_input)
 #         unit_features = tf.reduce_sum(self.self_attention(self.unit_embeddings_input, bias=0), axis=1)
 #         return tf.concat([conv_features, unit_features], axis=1)
 

@@ -1,11 +1,9 @@
 import tensorflow as tf
 import numpy as np
 
-
-def conv_body(state, filters=(16,), kernel_sizes=(3,), strides=(3,), output_size=64):
+def conv_body_with_dense(state, filters=(16,), kernel_sizes=(3,), strides=(3,), output_size=64):
     """
-    Assumes the state shape is 3 dimensional. Applies some number of convolution layers, followed by a single
-    dense layer.
+    Applies some number of convolution layers, followed by a single dense layer.
 
     :param state: Tensor of shape [channels, batch, x_dim, y_dim]
     :param filters: Tuple of filters sizes.
@@ -14,23 +12,41 @@ def conv_body(state, filters=(16,), kernel_sizes=(3,), strides=(3,), output_size
     :param output_size: The number of units to output to.
     :return: A tensor of shape [batch_size, output_size]
     """
-    architecture = list(zip(range(len(filters)), filters, kernel_sizes, strides))
-    logits = state
-    # logits = tf.transpose(state, [0, 3, 2, 1])  # Transpose into channels last format
+    tensor = conv_body(state, filters, kernel_sizes, strides)
     with tf.variable_scope('ac_shared', reuse=tf.AUTO_REUSE):
-        for i, filters, kernel_size, strides in architecture:
-            print("LOGITS", logits)
-            logits = tf.layers.conv2d(logits, filters, kernel_size, strides, activation=tf.nn.leaky_relu,
-                                      kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
-                                      name='conv%d' % i)
-        logits = tf.layers.flatten(logits)
-        logits = tf.layers.dense(logits, units=output_size, activation=tf.nn.leaky_relu, name='d1')
+        logits = tf.layers.flatten(tensor)
+        logits = tf.layers.dense(logits, units=output_size, activation=tf.nn.leaky_relu, name='dense1')
 
     logits = tf.reshape(logits, [-1, output_size])
     return logits
 
+def conv_body(tensor, filters=(16,), kernel_sizes=(3,), strides=(3,), output_channels=4):
+    """
+    Applies some number of convolution layers
 
-def actor_spatial_head(features, screen_dim, num_spatial_actions, name='actor_spatial_x'):
+    :param tensor: Tensor of shape [batch, x_dim, y_dim, channels]
+    :param filters: Tuple of filters sizes.
+    :param kernel_sizes: Tuple of kernel sizes.
+    :param strides: Tuple of stride sizes. All tuples must be the same length.
+    :return: Tensor of shape [batch, x_dim, y_dim, channels]
+    """
+    architecture = list(zip(range(len(filters)), filters, kernel_sizes, strides))
+
+    with tf.variable_scope('ac_shared', reuse=tf.AUTO_REUSE):
+        for i, filters, kernel_size, strides in architecture:
+            print("DEBUG: Convolutional Layer", i, "Filter size", filters, \
+                "Kernel", kernel_size, "Stride", strides, "Current Tensor", tensor)
+            tensor = tf.layers.conv2d(tensor, filters, kernel_size, strides, activation=tf.nn.leaky_relu,
+                                      kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                                      name='conv{}'.format(i))
+        # # 1x1 convolution to change output shape
+        # tensor = tf.layers.conv2d(tensor, output_channels, 1, 1, activation=tf.nn.leaky_relu,
+        #                               kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+        #                               name='conv_combine')
+    return tensor
+
+
+def actor_spatial_head(features, screen_dim, num_spatial_actions, name='actor_spatial_x', from_conv=False):
     """
     Feed forward network to calculate the spacial action probabilities.
 
@@ -40,13 +56,31 @@ def actor_spatial_head(features, screen_dim, num_spatial_actions, name='actor_sp
     :param num_spatial_actions: Number of distributions over spatial coordinates for each x, y to produce.
 
     :return:
-        Tensor of shape [2, batch_size, screen_dim, num_spatial_actions]
+        Tensor of shape [2, batch_size, screen_dim, num_spatial_actions], Last Convolution before flatten
     """
     with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
-        distributions = tf.layers.dense(features,
-                                        units=2 * num_spatial_actions * screen_dim,
-                                        activation=None)
-    return tf.nn.softmax(tf.reshape(distributions, [2, -1, screen_dim, num_spatial_actions]), axis=-2)
+        if from_conv:
+            # 1x1 convolution to change output shape, 1 for each spatial action         
+            features = tf.layers.conv2d(features, num_spatial_actions, 1, 1, activation=tf.nn.leaky_relu,
+                                      kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                                      name='conv_combine')
+            # resize to the correct size for output
+            last_conv = tf.image.resize_bilinear(features, (screen_dim, screen_dim), name='resize_up')
+
+            # Each action got to choose what is important in the convolution above.
+            # Now we sum across x to get y probs and sum across y to get x probs.
+            y_flattened = tf.reduce_sum(last_conv, axis=1)
+            x_flattened = tf.reduce_sum(last_conv, axis=2)
+            # Reshape to the correct format: [2, batch, 84, actions]
+            xy_distribution = tf.stack([y_flattened, x_flattened], axis=0)
+        else:
+            distributions = tf.layers.dense(features,
+                                            units=2 * num_spatial_actions * screen_dim,
+                                            activation=None)
+            xy_distribution = tf.reshape(distributions, [2, -1, screen_dim, num_spatial_actions])
+            last_conv = None
+
+    return tf.nn.softmax(xy_distribution, axis=-2), last_conv
 
 
 def actor_pointer_head(features, embeddings, num_heads, name='pointer_head'):
@@ -79,7 +113,7 @@ def actor_pointer_head(features, embeddings, num_heads, name='pointer_head'):
         return probs / tf.reduce_sum(probs, axis=-1, keepdims=True)
 
 
-def actor_nonspatial_head(features, action_mask, num_actions, name='actor_nonspatial'):
+def actor_nonspatial_head(features, action_mask, num_actions, name='actor_nonspatial', from_conv=False):
     """
     Feed forward network to produce the nonspatial action probabilities.
 
@@ -90,12 +124,13 @@ def actor_nonspatial_head(features, action_mask, num_actions, name='actor_nonspa
     :return: Tensor of shape [batch_size, num_actions] of probability distributions.
     """
     with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
+        if from_conv:
+            features =  tf.layers.flatten(features)
         probs = tf.layers.dense(features, units=num_actions, activation=tf.nn.softmax, name='output')
     masked = (probs + 1e-10) * action_mask
     return masked / tf.reduce_sum(masked, axis=1, keepdims=True)
 
-
-def value_head(features, name='critic'):
+def value_head(features, name='critic', from_conv=False):
     """
     Feed forward network to produce the state value.
 
@@ -104,5 +139,7 @@ def value_head(features, name='critic'):
     :return: Tensor of shape [batch_size] of state values.
     """
     with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
+        if from_conv:
+            features =  tf.layers.flatten(features)
         features = tf.layers.dense(features, units=1, activation=None, name='output')
     return tf.squeeze(features, axis=-1)

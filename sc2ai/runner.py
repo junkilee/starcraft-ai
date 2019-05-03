@@ -139,55 +139,53 @@ class AgentRunner:
         for i in range(num_games):
             rollouts[i].add_step(feature=agent_features[i])
 
-        # if collect_metadata:
-        #     # ----- CONV --------
-        #     key = 'meta_final_conv'
-        #     frames = meta_collector[key]
-
-        #     # fix range
-        #     arr = np.array(frames)
-        #     arr_range = np.max(arr) - np.min(arr)
-        #     arr = (arr - np.min(arr)) / arr_range
-
-        #     # to int
-        #     data = (arr * 255).astype(np.uint8)
-        #     # n_frames, xd, yd, n_channels = data.shape
-        #     data = data.transpose(0, 3, 1, 2) 
-        #     _, n_channels, xd, yd = data.shape
-        #     out_x_dim = int(n_channels / 2)
-
-        #     print(data.shape) # (240, 16, 28, 28)
-        #     reshaped = np.concatenate(data.reshape(-1, 2, xd*out_x_dim, yd).transpose(1,3,2,0)).transpose(2,0,1)
-        #     print(reshaped.shape)
-        #     skvideo.io.vwrite('vids/conv-{}.mp4'.format(self.episode_count), 
-        #         reshaped, outputdict={"-pix_fmt":"yuv420p"})
-
         if collect_metadata:
-            # ----- SPATIAL PROBS --------
-            key = 'meta_spatial_probs'
-            frames = np.array(meta_collector[key])
-            # fix range
-            frames_range = np.max(frames) - np.min(frames)
-            arr = (frames - np.min(frames)) / frames_range
+            # Write the end of conv_body and the end of spatial head
+            self.write_video('meta_conv_body_output', meta_collector)
+            self.write_video('meta_spatial_2d', meta_collector)
 
-            # data = (arr * 255).astype(np.uint8)
+            # ----- PROJECTED SPATIAL PROBS --------
+            frames = np.array(meta_collector['meta_spatial_probs'])
+            arr = self.normalize_frames(frames, name='meta_spatial_probs')
 
-            # print(PlayerRelative)
-            input_states = np.array(meta_collector['meta_map_features']) # [frames,x,y,channels]
-            # input_summed = np.sum(input_states, axis=-1)
-            # input_range = np.max(input_summed) - np.min(input_summed) + 0.01
-            # input_arr = (input_summed - np.min(input_summed)) / input_range
-
-            # print(np.max(input_states), np.min(input_states), np.max(input_summed), np.min(input_summed))
-            # print(input_range)
-            # print(np.max(input_arr), np.min(input_arr))
-
+            input_states = np.array(meta_collector['meta_map_features'])
             three_channel = np.stack([arr, input_states[:,:,:,PlayerRelative.NEUTRAL], input_states[:,:,:,PlayerRelative.SELF]], axis=-1)
 
-            skvideo.io.vwrite('vids/conv-{}.mp4'.format(self.episode_count), 
+            skvideo.io.vwrite('vids/map-{}.mp4'.format(self.episode_count), 
                 (three_channel * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})
 
         return rollouts
+
+    def normalize_frames(self, frames, name="", debug=True):
+        f_min = np.min(frames, (0,1,2,))
+        f_max = np.max(frames, (0,1,2,))
+        f_range = f_max - f_min + 1e-12
+        arr = (frames - f_min) / f_range
+
+        if debug:
+            print("DEBUG: {} range/min/max\n\t".format(name), f_range, f_min, f_max)
+        return arr
+
+    def write_video(self, name, meta_collector):
+        # ----- LAST CONV LAYER --------
+        frames = np.array(meta_collector[name])
+        arr = self.normalize_frames(frames, name=name)
+
+        _, yd, xd, n_channels = arr.shape
+
+        if n_channels > 1:
+            data = arr.transpose(0, 3, 1, 2) # change to [batch, channels, y,x]
+            out_y_dim = int(n_channels / 2)
+            new_shape = data.reshape(-1, 2, yd*out_y_dim, xd)
+            new_shapeT = new_shape.transpose(1,3,2,0) # [2, x, y*n, batch]
+            concat = np.concatenate(new_shapeT) #[x*2, y*n, batch]
+            output = concat.transpose(2,1,0) #[batch, y*2, x*2]
+        else:
+            output = arr
+
+        skvideo.io.vwrite('vids/{}-{}.mp4'.format(name, self.episode_count), 
+            (output * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})
+
 
     # ------------------------ UTILS ------------------------
 
