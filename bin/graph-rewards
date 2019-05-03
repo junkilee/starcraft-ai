@@ -3,6 +3,8 @@
 import numpy as np
 import os
 import argparse
+import matplotlib
+matplotlib.use("TkAgg")
 from matplotlib import pyplot as plt
 
 parser = argparse.ArgumentParser(description='Graph rewards')
@@ -16,15 +18,16 @@ rewards_path = os.path.join(save_path, 'rewards.txt')
 rewards = []
 with open(rewards_path, 'r') as f:
     for line in f:
-        rewards.append(int(line))
-
+        rewards.append(float(line))
 rewards = np.array(rewards)
+rewards[rewards < 0] = 0
 smooth_n = args.smooth
 
 smoothed_rewards = []
 for i in range(len(rewards) - smooth_n):
     smoothed_rewards.append(np.sum(rewards[i:i+smooth_n]) / smooth_n)
 
+print("Number of Episodes:", len(rewards))
 print("Best average:", np.max(smoothed_rewards + [0]))
 print("Current average:", ([0] + smoothed_rewards)[-1])
 plt.plot(smoothed_rewards)

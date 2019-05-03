@@ -65,22 +65,24 @@ def actor_spatial_head(features, screen_dim, num_spatial_actions, name='actor_sp
                                       kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
                                       name='conv_combine')
             # resize to the correct size for output
-            last_conv = tf.image.resize_bilinear(features, (screen_dim, screen_dim), name='resize_up')
+            probs_2d = tf.image.resize_bilinear(features, (screen_dim, screen_dim), name='resize_up')
 
-            # Each action got to choose what is important in the convolution above.
-            # Now we sum across x to get y probs and sum across y to get x probs.
-            y_flattened = tf.reduce_sum(last_conv, axis=1)
-            x_flattened = tf.reduce_sum(last_conv, axis=2)
-            # Reshape to the correct format: [2, batch, 84, actions]
-            xy_distribution = tf.stack([y_flattened, x_flattened], axis=0)
+            # Softmax each 84x84 channel by (reshape [-1,84x84,ch] -> softmax -> reshape [-1,84,84,ch])
+            probs_2d_flat = tf.reshape(probs_2d, [-1, screen_dim * screen_dim, num_spatial_actions])
+            softmax_probs_2d = tf.reshape(tf.nn.softmax(probs_2d_flat, axis=1), [-1, screen_dim, screen_dim, num_spatial_actions])
+            
+            return softmax_probs_2d
+            # # Each action got to choose what is important in the convolution above.
+            # # Now we sum across x to get y probs and sum across y to get x probs.
+            # y_flattened = tf.reduce_sum(probs_2d, axis=1)
+            # x_flattened = tf.reduce_sum(probs_2d, axis=2)
+            # # Reshape to the correct format: [2, batch, 84, actions]
+            # xy_distribution = tf.stack([y_flattened, x_flattened], axis=0)
         else:
-            distributions = tf.layers.dense(features,
-                                            units=2 * num_spatial_actions * screen_dim,
-                                            activation=None)
-            xy_distribution = tf.reshape(distributions, [2, -1, screen_dim, num_spatial_actions])
-            last_conv = None
+            print("DEBUG: function deprecated without 'from_conv=True' ")
+            return None
 
-    return tf.nn.softmax(xy_distribution, axis=-2), last_conv
+    # return tf.nn.softmax(xy_distribution, axis=-2), softmax_probs_2d
 
 
 def actor_pointer_head(features, embeddings, num_heads, name='pointer_head'):

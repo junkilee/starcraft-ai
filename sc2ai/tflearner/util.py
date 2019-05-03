@@ -10,10 +10,17 @@ def sample_action(num_spatial_actions, nonspatial_probs, spatial_probs):
     """
     chosen_nonspatials = sample_multiple(nonspatial_probs)  # [num_games]
     agent_actions = []
-    for i, chosen_nonspatial in enumerate(chosen_nonspatials):
+    for batch_i, chosen_nonspatial in enumerate(chosen_nonspatials):
         if chosen_nonspatial < num_spatial_actions:
-            x = np.random.choice(84, p=spatial_probs[0, i, :, chosen_nonspatial])
-            y = np.random.choice(84, p=spatial_probs[1, i, :, chosen_nonspatial])
+            spatial_probs_for_this_batch = np.reshape(spatial_probs[batch_i, :, :, chosen_nonspatial], [-1])
+            # print("DEBUG: fixing_sample_action", spatial_probs_for_this_batch.shape, np.sum(spatial_probs_for_this_batch))
+            # spatial_probs = [batch, 84,84,actions]
+            index = np.random.choice(84*84, p=spatial_probs_for_this_batch)
+            x = index % 84
+            y = int((index - x) / 84)
+            # print("DEBUG indexing", index, x, y)
+            # x = np.random.choice(84, p=spatial_probs[0, batch_i, :, chosen_nonspatial])
+            # y = np.random.choice(84, p=spatial_probs[1, batch_i, :, chosen_nonspatial])
             agent_actions.append(AgentAction(chosen_nonspatial, spatial_coords=(x, y)))
         else:
             agent_actions.append(AgentAction(chosen_nonspatial))

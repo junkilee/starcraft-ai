@@ -145,11 +145,11 @@ class AgentRunner:
             self.write_video('meta_spatial_2d', meta_collector)
 
             # ----- PROJECTED SPATIAL PROBS --------
-            frames = np.array(meta_collector['meta_spatial_probs'])
+            frames = np.array(meta_collector['meta_spatial_2d'])
             arr = self.normalize_frames(frames, name='meta_spatial_probs')
 
             input_states = np.array(meta_collector['meta_map_features'])
-            three_channel = np.stack([arr, input_states[:,:,:,PlayerRelative.NEUTRAL], input_states[:,:,:,PlayerRelative.SELF]], axis=-1)
+            three_channel = np.concatenate([arr, input_states[:,:,:,[PlayerRelative.NEUTRAL, PlayerRelative.SELF]]], axis=-1)
 
             skvideo.io.vwrite('vids/map-{}.mp4'.format(self.episode_count), 
                 (three_channel * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})

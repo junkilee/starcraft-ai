@@ -66,9 +66,9 @@ class ActorCriticAgent(ABC):
         :return: The feed dict required to evaluate `train_values` and `train_log_probs`
         """
 
-    def variable_summaries(self, var):
+    def variable_summaries(self, var, name):
         """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-        with tf.name_scope('summaries'):
+        with tf.name_scope('summaries_{}'.format(name)):
             mean = tf.reduce_mean(var)
             tf.summary.scalar('mean', mean)
             with tf.name_scope('stddev'):
@@ -130,9 +130,13 @@ class InterfaceAgent(ActorCriticAgent, ABC):
 
         result = nonspatial_log_probs
         if spatial_probs is not None:
-            probs_y = self._get_chosen_spatial_prob(spatial_probs[0], self.spatial_input[:, 1])
-            probs_x = self._get_chosen_spatial_prob(spatial_probs[1], self.spatial_input[:, 0])
-            spatial_log_probs = tf.log(probs_x + 1e-10) + tf.log(probs_y + 1e-10)
+            spatial_probs = self._get_chosen_spatial_prob(spatial_probs, self.spatial_input, self.action_input)
+            # print("DEBUG: back here", spatial_probs)
+            # probs_y = self._get_chosen_spatial_prob(spatial_probs[0], self.spatial_input[:, 1])
+            # probs_x = self._get_chosen_spatial_prob(spatial_probs[1], self.spatial_input[:, 0])
+            # print("DEBUG probs", probs_y, probs_x)
+            spatial_log_probs = tf.log(spatial_probs + 1e-10)
+            # spatial_log_probs = tf.log(probs_x + 1e-10) + tf.log(probs_y + 1e-10)
             result = result + tf.where(self.action_input < self.num_spatial_actions,
                                        x=spatial_log_probs,
                                        y=tf.zeros_like(spatial_log_probs))
@@ -147,15 +151,32 @@ class InterfaceAgent(ActorCriticAgent, ABC):
                                        y=tf.zeros_like(selection_log_prob))
         return result
 
-    def _get_chosen_spatial_prob(self, spatial_probs, spatial_choice):
-        spatial_probs = util.index(spatial_probs, spatial_choice)  # [T, num_screen_dimensions]
-        return util.index(spatial_probs, self.action_input % tf.convert_to_tensor(self.num_spatial_actions))  # [T]
+    def _get_chosen_spatial_prob(self, spatial_probs, spatial_choice, nonspatial_choice):
+        # print("DEBUG get_chosen",spatial_probs, spatial_choice)
+        # chosen_spatial_probs = spatial_probs[:,:,:,nonspatial_choice]
+        spatial_probs = util.index(tf.transpose(spatial_probs, [0, 3, 1, 2]), nonspatial_choice) # Choose the action we took
+        # spatial_probs = [batch, 84,84], spatial_choice = [batch, 2]
+        # The idea is to make 2 one_hots of size 84, then matmul then together to get a 0/1 mat of size [batch, 84,84]
+        # where the only 1 is at the position we chose.
+        one_hot_y = tf.one_hot(spatial_choice[:,0],84)
+        one_hot_x = tf.one_hot(spatial_choice[:,1],84)
+        one_hot_mask = tf.einsum('bi,bj->bij', one_hot_y,one_hot_x)
+
+        return tf.reduce_sum(spatial_probs * one_hot_mask, axis=(1,2))
+
+        # print('DEBUG: one hots', one_hot_y, one_hot_x, one_hot_mask)
+        # print("DEBUG: probs", probs)
+
+        # one_hot_y = print("DEBUG get_chosen spatial_probs",spatial_probs, tf.one_hot(spatial_choice[:,0], tf.shape(spatial_probs)[1]))
+        # print("DEBUG get_chosen spatial_probs",spatial_probs, tf.gather_nd(spatial_probs, spatial_choice))
+        # print("DEBUG get_chosen one_hot",tf.one_hot(spatial_choice[:,0], tf.shape(spatial_probs)[1]))
+        # return util.index(spatial_probs, self.action_input % tf.convert_to_tensor(self.num_spatial_actions))  # [T]
 
     def _probs_from_features(self, features, from_conv=False):
         num_steps = tf.shape(self.mask_input)[0] # I think this removes the extra bootstrapped states?
         nonspatial_probs = parts.actor_nonspatial_head(features[:num_steps], \
             self.mask_input, self.num_actions, from_conv=from_conv)
-        spatial_probs, self.last_spatial_conv = parts.actor_spatial_head(features[:num_steps], screen_dim=84, \
+        spatial_probs = parts.actor_spatial_head(features[:num_steps], screen_dim=84, \
             num_spatial_actions=self.num_spatial_actions, from_conv=from_conv)
         
         return nonspatial_probs, spatial_probs
@@ -167,7 +188,9 @@ class ConvAgent(InterfaceAgent):
         self.nonspatial_probs, self.spatial_probs = self._probs_from_features(self.features, from_conv=True)
 
         # Summaries for tensorboard
-        self.variable_summaries(self.map_features)
+        # self.variable_summaries(self.map_features)
+        self.variable_summaries(self.features, name='conv_body_output')
+        self.variable_summaries(self.spatial_probs, name='spatial_probs')
         self.merged_summary = tf.summary.merge_all()
         self.train_writer = tf.summary.FileWriter('tboard/train', self.session.graph)
 
@@ -175,8 +198,8 @@ class ConvAgent(InterfaceAgent):
         # Collect features across batch
         map_features = np.stack([f[MapFeature] for f in features], axis=0)
 
-        summary, nonspatial_probs, spatial_probs, meta_map_features, meta_conv_body_output, meta_spatial_2d = self.session.run(
-            [self.merged_summary, self.nonspatial_probs, self.spatial_probs, self.map_features, self.features, self.last_spatial_conv], {
+        summary, nonspatial_probs, spatial_probs, meta_map_features, meta_conv_body_output = self.session.run(
+            [self.merged_summary, self.nonspatial_probs, self.spatial_probs, self.map_features, self.features], {
                 self.map_features: map_features,
                 self.mask_input: mask,
             })
@@ -185,10 +208,10 @@ class ConvAgent(InterfaceAgent):
 
         self.meta['meta_map_features'] = meta_map_features # [batch,y,x,channels]
         self.meta['meta_conv_body_output'] = meta_conv_body_output # [batch, y,x,channels]
-        self.meta['meta_spatial_2d'] = meta_spatial_2d # [batch, y,x,channels]
-        x_probs = np.expand_dims(spatial_probs[0,0,:,0], axis=0) #[batch, 84] 
-        y_probs = np.expand_dims(spatial_probs[1,0,:,0], axis=-1) #[84, batch] 
-        self.meta['meta_spatial_probs'] = np.expand_dims(x_probs * y_probs, axis=0)
+        self.meta['meta_spatial_2d'] = spatial_probs # [batch, y,x,channels]
+        # x_probs = np.expand_dims(spatial_probs[0,0,:,0], axis=0) #[batch, 84] 
+        # y_probs = np.expand_dims(spatial_probs[1,0,:,0], axis=-1) #[84, batch] 
+        # self.meta['meta_spatial_probs'] = np.expand_dims(x_probs * y_probs, axis=0)
         
         self.steps += 1
 
