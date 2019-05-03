@@ -8,7 +8,7 @@ from sc2ai.env_interface import *
 
 from pysc2.lib.features import PlayerRelative
 
-import skvideo.io
+# import skvideo.io
 
 # ------------------------ FACTORIES ------------------------
 
@@ -151,8 +151,8 @@ class AgentRunner:
             input_states = np.array(meta_collector['meta_map_features'])
             three_channel = np.concatenate([arr, input_states[:,:,:,[PlayerRelative.NEUTRAL, PlayerRelative.SELF]]], axis=-1)
 
-            skvideo.io.vwrite('vids/map-{}.mp4'.format(self.episode_count), 
-                (three_channel * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})
+            # skvideo.io.vwrite('vids/map-{}.mp4'.format(self.episode_count), 
+            #     (three_channel * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})
 
         return rollouts
 
@@ -183,8 +183,8 @@ class AgentRunner:
         else:
             output = arr
 
-        skvideo.io.vwrite('vids/{}-{}.mp4'.format(name, self.episode_count), 
-            (output * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})
+        # skvideo.io.vwrite('vids/{}-{}.mp4'.format(name, self.episode_count), 
+        #     (output * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})
 
 
     # ------------------------ UTILS ------------------------
