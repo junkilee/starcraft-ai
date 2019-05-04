@@ -61,15 +61,20 @@ def actor_spatial_head(features, screen_dim, num_spatial_actions, name='actor_sp
     with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
         if from_conv:
             # 1x1 convolution to change output shape, 1 for each spatial action         
-            features = tf.layers.conv2d(features, num_spatial_actions, 1, 1, activation=tf.nn.leaky_relu,
+            features = tf.layers.conv2d(features, num_spatial_actions, 1, 1, activation=None,
                                       kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
                                       name='conv_combine')
             # resize to the correct size for output
+            shape = features.get_shape().as_list()
+            size_diff = shape[1] * shape[2]/(screen_dim*screen_dim)
+            print("DEBUG: size diff", size_diff)
             probs_2d = tf.image.resize_bilinear(features, (screen_dim, screen_dim), name='resize_up')
 
             # Softmax each 84x84 channel by (reshape [-1,84x84,ch] -> softmax -> reshape [-1,84,84,ch])
-            probs_2d_flat = tf.reshape(probs_2d, [-1, screen_dim * screen_dim, num_spatial_actions])
-            softmax_probs_2d = tf.reshape(tf.nn.softmax(probs_2d_flat, axis=1), [-1, screen_dim, screen_dim, num_spatial_actions])
+            probs_flat = tf.reshape(probs_2d, [-1, screen_dim * screen_dim, num_spatial_actions])
+            softmax_temp = size_diff # Temperature - estimated because 20^2 /84^2 ~ 0.05, so this can be the loss from upscaling?
+            softmax_flat = tf.nn.softmax(probs_flat / softmax_temp, axis=1)
+            softmax_probs_2d = tf.reshape(softmax_flat, [-1, screen_dim, screen_dim, num_spatial_actions])
             
             return softmax_probs_2d
             # # Each action got to choose what is important in the convolution above.

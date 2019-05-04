@@ -137,9 +137,10 @@ class InterfaceAgent(ActorCriticAgent, ABC):
             # print("DEBUG probs", probs_y, probs_x)
             spatial_log_probs = tf.log(spatial_probs + 1e-10)
             # spatial_log_probs = tf.log(probs_x + 1e-10) + tf.log(probs_y + 1e-10)
-            result = result + tf.where(self.action_input < self.num_spatial_actions,
-                                       x=spatial_log_probs,
-                                       y=tf.zeros_like(spatial_log_probs))
+            # result = result + tf.where(self.action_input < self.num_spatial_actions,
+            #                            x=spatial_log_probs,
+            #                            y=tf.zeros_like(spatial_log_probs))
+            result = result + spatial_log_probs
 
         if selection_probs is not None:
             probs_selection = self._get_chosen_selection_probs(selection_probs, self.unit_selection_input)
@@ -158,8 +159,8 @@ class InterfaceAgent(ActorCriticAgent, ABC):
         # spatial_probs = [batch, 84,84], spatial_choice = [batch, 2]
         # The idea is to make 2 one_hots of size 84, then matmul then together to get a 0/1 mat of size [batch, 84,84]
         # where the only 1 is at the position we chose.
-        one_hot_y = tf.one_hot(spatial_choice[:,0],84)
-        one_hot_x = tf.one_hot(spatial_choice[:,1],84)
+        one_hot_y = tf.one_hot(spatial_choice[:,1],84)
+        one_hot_x = tf.one_hot(spatial_choice[:,0],84)
         one_hot_mask = tf.einsum('bi,bj->bij', one_hot_y,one_hot_x)
 
         return tf.reduce_sum(spatial_probs * one_hot_mask, axis=(1,2))
