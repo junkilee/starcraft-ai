@@ -40,7 +40,7 @@ class ActionList:
         return gym_space
 
 
-class Action:
+class Action(ABC):
     """An abstract class for a default action which relies only on the policy network's output"""
     def __init__(self, arg_types, **kwargs):
         self.default_arguments = kwargs
@@ -65,6 +65,10 @@ class Action:
                 vectors.add(arg_type.sizes)
         return vectors
 
+    @abstractmethod
+    def transform_action(self, observation, action_values):
+        pass
+
 
 class AtomAction(Action):
     """A Class made to directly mirror pysc2 523 default actions"""
@@ -74,31 +78,20 @@ class AtomAction(Action):
         arg_types = function_tuple.args
         super().__init__(self, arg_types, **kwargs)
 
+    def transform_action(self):
+
+
+
+
 
 class SelectPointAction(AtomAction):
     def __init__(self, **kwargs):
         super().__init__(actions.FUNCTIONS.select_point, **kwargs)
 
 
-class SelectPointAction(AtomAction):
+class SelectRectAction(AtomAction):
     def __init__(self, **kwargs):
         super().__init__(actions.FUNCTIONS.select_point, **kwargs)
 
 
-class HighLevelAction(Action):
-    """
-    An abstract class for a high level action which relies on an agent's observation other than the policy network's
-    output itself
-
-    """
-    def __init__(self, function_type, arg_types, **kwargs):
-        super().__init__(function_type, arg_types, **kwargs)
-
-    def __call__(self, action_values):
-
-        return
-
-    @abstractmethod
-    def parameter_type(self):
-        pass
-
+class CompoundAction(Action):
