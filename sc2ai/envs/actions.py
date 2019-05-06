@@ -79,24 +79,10 @@ class SelectPointAction(AtomAction):
     def __init__(self, **kwargs):
         super().__init__(actions.FUNCTIONS.select_point, **kwargs)
 
+
 class SelectPointAction(AtomAction):
     def __init__(self, **kwargs):
         super().__init__(actions.FUNCTIONS.select_point, **kwargs)
-
-def MoveAction(Action):
-    def __call__(self):
-        return
-
-    def parameter_type(self):
-        return None
-
-
-def AttackAction(Action):
-    def __call__(self):
-        return
-
-    def parameter_type(self):
-        return None
 
 
 class HighLevelAction(Action):
@@ -112,4 +98,7 @@ class HighLevelAction(Action):
 
         return
 
-if __name__ == '__main__':
+    @abstractmethod
+    def parameter_type(self):
+        pass
+
