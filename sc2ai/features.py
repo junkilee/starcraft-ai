@@ -51,6 +51,13 @@ class FeatureCollection:
 
         return shapes
 
+    def dummy_state(self):
+        states = {}
+        for class_name, extractor in self.extractors.items():
+            states[class_name] = extractor.dummy_state()
+
+        return states
+
     def extract_from_state(self, timestep):
         """ Each extractor should get its information from state. Return a dict of {Class: Feauture} """
         features = {}

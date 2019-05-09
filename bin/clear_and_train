@@ -1,4 +1,4 @@
-rm saves/mvr/*
+rm -r saves/*
 rm vids/*
 rm tboard/train/*
-./bin/train	
+./bin/train

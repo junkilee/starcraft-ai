@@ -1,0 +1,4 @@
+cp -r ../../remote/bweissm1/starcraft-ai/saves/* saves/
+rm vids/*
+rm tboard/train/*
+./bin/train
