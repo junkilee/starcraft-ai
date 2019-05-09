@@ -190,7 +190,7 @@ class ConvAgent(InterfaceAgent):
         with tf.variable_scope('c_mid', reuse=tf.AUTO_REUSE):
             mid_scale = parts.conv_body(self.map_features, filters=(4,8,8), kernel_sizes=(3,3,3), strides=(2,2,1))
         with tf.variable_scope('c_small', reuse=tf.AUTO_REUSE):
-            small_scale = parts.conv_body(self.map_features, filters=(4,8,8), kernel_sizes=(3,3,3), strides=(3,2,1))
+            small_scale = parts.conv_body(self.map_features, filters=(4,8,8), kernel_sizes=(3,3,3), strides=(3,2,2))
         self.features = tf.concat([
             parts.size_up(full_scale, 84), 
             parts.size_up(mid_scale, 84),
