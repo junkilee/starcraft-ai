@@ -5,10 +5,10 @@ from sc2ai.environment import MultipleEnvironment, SCEnvironmentWrapper
 from sc2ai.tflearner.tflearner import ActorCriticLearner, Rollout
 from sc2ai.tflearner.tf_agent import InterfaceAgent, ConvAgent
 from sc2ai.env_interface import *
+from sc2ai.video import save_video
 
 from pysc2.lib.features import PlayerRelative
 
-# import skvideo.io
 
 # ------------------------ FACTORIES ------------------------
 
@@ -175,6 +175,10 @@ class AgentRunner:
     def write_video(self, name, meta_collector, rgb_overlay=None):
         # ----- LAST CONV LAYER --------
         frames = np.array(meta_collector[name])
+
+        if rgb_overlay is not None:
+            name = name + "-rgb"
+
         arr = self.normalize_frames(frames, name=name)
 
         batch, yd, xd, n_channels = arr.shape
@@ -189,17 +193,15 @@ class AgentRunner:
         else:
             output = arr
 
-
         if rgb_overlay is not None:
             g_overlay = np.stack([rgb_overlay[...,0]] * n_channels, axis=-1)
             b_overlay = np.stack([rgb_overlay[...,1]] * n_channels, axis=-1)
             g_ch = self.flatten_channels_2d(g_overlay)
             b_ch = self.flatten_channels_2d(b_overlay)
             output = np.stack([output, g_ch, b_ch], axis=-1)
-            name = name + "-rgb"
+            
 
-        # skvideo.io.vwrite('vids/{}-{}.mp4'.format(name, self.episode_count), 
-        #     (output * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})
+        save_video(name='vids/{}-{}.mp4'.format(name, self.episode_count), data=(output * 255).astype(np.uint8))
 
 
     # ------------------------ UTILS ------------------------
