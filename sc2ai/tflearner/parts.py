@@ -82,7 +82,7 @@ def actor_spatial_head(features, screen_dim, num_spatial_actions, name='actor_sp
             softmax_flat = tf.nn.softmax(probs_flat / softmax_temp, axis=1)
             uniform = tf.ones_like(softmax_flat) / (screen_dim * screen_dim)
             softmax_with_uniform = softmax_flat * (1.0 - uniform_prob) + uniform * uniform_prob
-            softmax_probs_2d = tf.reshape(softmax_flat, [-1, screen_dim, screen_dim, num_spatial_actions])
+            softmax_probs_2d = tf.reshape(softmax_with_uniform, [-1, screen_dim, screen_dim, num_spatial_actions])
             
             return softmax_probs_2d
             # # Each action got to choose what is important in the convolution above.
