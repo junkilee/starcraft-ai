@@ -46,6 +46,12 @@ def conv_body(tensor, filters=(16,), kernel_sizes=(3,), strides=(3,), output_cha
     return tensor
 
 
+def size_up(features, target_dim):
+    shape = features.get_shape().as_list()
+    size_diff = shape[1] * shape[2]/(target_dim*target_dim)
+    print("DEBUG: size diff", size_diff)
+    return tf.image.resize_bilinear(features, (target_dim, target_dim), name='resize_up')
+
 def actor_spatial_head(features, screen_dim, num_spatial_actions, name='actor_spatial_x', from_conv=False):
     """
     Feed forward network to calculate the spacial action probabilities.
@@ -65,14 +71,11 @@ def actor_spatial_head(features, screen_dim, num_spatial_actions, name='actor_sp
                                       kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
                                       name='conv_combine')
             # resize to the correct size for output
-            shape = features.get_shape().as_list()
-            size_diff = shape[1] * shape[2]/(screen_dim*screen_dim)
-            print("DEBUG: size diff", size_diff)
-            probs_2d = tf.image.resize_bilinear(features, (screen_dim, screen_dim), name='resize_up')
+            probs_2d = size_up(features, screen_dim)
 
             # Softmax each 84x84 channel by (reshape [-1,84x84,ch] -> softmax -> reshape [-1,84,84,ch])
             probs_flat = tf.reshape(probs_2d, [-1, screen_dim * screen_dim, num_spatial_actions])
-            softmax_temp = 0.001 # size_diff * 1 # Temperature - Use your actions early!
+            softmax_temp = 0.001 # Temperature - Use your actions early!
             print("DEBUG: Temperature", softmax_temp)
             softmax_flat = tf.nn.softmax(probs_flat / softmax_temp, axis=1)
             softmax_probs_2d = tf.reshape(softmax_flat, [-1, screen_dim, screen_dim, num_spatial_actions])
