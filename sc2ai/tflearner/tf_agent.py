@@ -185,7 +185,7 @@ class InterfaceAgent(ActorCriticAgent, ABC):
 class ConvAgent(InterfaceAgent):
     def __init__(self, interface):
         super().__init__(interface)
-        self.features = parts.conv_body(self.map_features, filters=(4,8,8,16), kernel_sizes=(3,3,3,3), strides=(2,2,1,1))
+        self.features = parts.conv_body(self.map_features, filters=(8,16,16,32), kernel_sizes=(3,3,3,3), strides=(1,1,1,1))
         self.nonspatial_probs, self.spatial_probs = self._probs_from_features(self.features, from_conv=True)
 
         # Summaries for tensorboard
