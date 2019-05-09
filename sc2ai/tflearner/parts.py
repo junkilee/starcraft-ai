@@ -133,6 +133,10 @@ def actor_nonspatial_head(features, action_mask, num_actions, name='actor_nonspa
     """
     with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
         if from_conv:
+            features = tf.layers.conv2d(features, num_actions, 1, 1, activation=None,
+                          kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                          name='conv_combine')
+
             features =  tf.layers.flatten(features)
         probs = tf.layers.dense(features, units=num_actions, activation=tf.nn.softmax, name='output')
     masked = (probs + 1e-10) * action_mask

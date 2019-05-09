@@ -1,5 +1,8 @@
 cp -r ../../remote/bweissm1/starcraft-ai/saves/* saves/
 ./bin/graph-rewards mvr --smooth 20
-rm vids/*
+
 rm tboard/train/*
+cp -r ../../remote/bweissm1/starcraft-ai/tboard/* tboard/
+
+rm vids/*
 ./bin/train
