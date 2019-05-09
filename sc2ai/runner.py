@@ -163,16 +163,17 @@ class AgentRunner:
             print("DEBUG: {} range/min/max\n\t".format(name), f_range, f_min, f_max)
         return arr
 
-    def flatten_channels_2d(self,arr):
+    def flatten_channels_2d(self,arr, width):
         batch, yd, xd, n_channels = arr.shape
         data = arr.transpose(0, 3, 1, 2) # change to [batch, channels, y,x]
-        out_y_dim = int(n_channels / 2)
-        new_shape = data.reshape(-1, 2, yd*out_y_dim, xd)
+        out_y_dim = int(n_channels / 4)
+        new_shape = data.reshape(-1, 4, yd*out_y_dim, xd)
         new_shapeT = new_shape.transpose(1,3,2,0) # [2, x, y*n, batch]
         concat = np.concatenate(new_shapeT) #[x*2, y*n, batch]
         return concat.transpose(2,1,0) #[batch, y*n, x*2]
 
     def write_video(self, name, meta_collector, rgb_overlay=None):
+        GRID_WIDTH = 4
         # ----- LAST CONV LAYER --------
         frames = np.array(meta_collector[name])
 
@@ -183,21 +184,22 @@ class AgentRunner:
 
         batch, yd, xd, n_channels = arr.shape
 
-        if n_channels % 2 != 0:
-            arr = np.concatenate([arr, np.zeros((batch, yd, xd, 1))], axis=-1)
+        if n_channels % GRID_WIDTH != 0:
+            extra_needed = GRID_WIDTH - (n_channels % GRID_WIDTH)
+            arr = np.concatenate([arr, np.zeros((batch, yd, xd, extra_needed))], axis=-1)
 
         batch, yd, xd, n_channels = arr.shape
 
         if n_channels > 1:
-            output = self.flatten_channels_2d(arr)
+            output = self.flatten_channels_2d(arr, width=GRID_WIDTH)
         else:
             output = arr
 
         if rgb_overlay is not None:
             g_overlay = np.stack([rgb_overlay[...,0]] * n_channels, axis=-1)
             b_overlay = np.stack([rgb_overlay[...,1]] * n_channels, axis=-1)
-            g_ch = self.flatten_channels_2d(g_overlay)
-            b_ch = self.flatten_channels_2d(b_overlay)
+            g_ch = self.flatten_channels_2d(g_overlay, width=GRID_WIDTH)
+            b_ch = self.flatten_channels_2d(b_overlay, width=GRID_WIDTH)
             output = np.stack([output, g_ch, b_ch], axis=-1)
             
 
