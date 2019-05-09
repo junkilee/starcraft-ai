@@ -112,11 +112,14 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
         return [
             SpatialEnvAction(pysc2_actions.FUNCTIONS.Attack_screen, ('now', None)),
             SpatialEnvAction(pysc2_actions.FUNCTIONS.Move_screen, ('now', None)),
+            
+            SpatialEnvAction(pysc2_actions.FUNCTIONS.select_point, ('select', None)),
 
-            SelectUnitEnvAction(pysc2_actions.FUNCTIONS.Attack_screen, ('now', None)),
-            SelectUnitEnvAction(pysc2_actions.FUNCTIONS.select_point, ('select', None)),
+            # SelectUnitEnvAction(pysc2_actions.FUNCTIONS.Attack_screen, ('now', None)),
+            # SelectUnitEnvAction(pysc2_actions.FUNCTIONS.select_point, ('select', None)),
 
             NoParamEnvAction(pysc2_actions.FUNCTIONS.select_army, ('select', None)),
+            NoParamEnvAction(pysc2_actions.FUNCTIONS.no_op, ('select',)),
         ]
 
     def _features(self):
@@ -125,18 +128,22 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
             HealthMapFeature(),
         ]
 
-class TrainMarines(RoachesEnvironmentInterface):
+class TrainMarines(EnvironmentInterface):
 
     def _actions(self):
         return [
             SpatialEnvAction(pysc2_actions.FUNCTIONS.Move_screen, ('now', None)),
             SpatialEnvAction(pysc2_actions.FUNCTIONS.Build_Barracks_screen, ('now', None)),
             SpatialEnvAction(pysc2_actions.FUNCTIONS.Build_SupplyDepot_screen, ('now', None)),
+            
+            SpatialEnvAction(pysc2_actions.FUNCTIONS.select_point, ('select', None)),
 
-            SelectUnitEnvAction(pysc2_actions.FUNCTIONS.select_point, ('select', None)),
+            # SelectUnitEnvAction(pysc2_actions.FUNCTIONS.select_point, ('select', None)),
 
             NoParamEnvAction(pysc2_actions.FUNCTIONS.select_idle_worker, ('select',)),
-            NoParamEnvAction(pysc2_actions.FUNCTIONS.select_army, ('now',)),
+            # NoParamEnvAction(pysc2_actions.FUNCTIONS.select_army, ('now',)),
+            NoParamEnvAction(pysc2_actions.FUNCTIONS.Train_Marine_quick, ('now',)),
+            NoParamEnvAction(pysc2_actions.FUNCTIONS.Train_SCV_quick, ('now',)),
             NoParamEnvAction(pysc2_actions.FUNCTIONS.select_rect, ('select', [0, 0], [83, 83])),
             NoParamEnvAction(pysc2_actions.FUNCTIONS.no_op, ('select',)),
         ]

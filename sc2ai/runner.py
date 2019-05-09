@@ -14,11 +14,11 @@ from pysc2.lib.features import PlayerRelative
 
 def build_agent_interface(map_name):
     if map_name in {'DefeatRoaches', 'StalkersVsRoaches'}:
-        return EmbeddingInterfaceWrapper(RoachesEnvironmentInterface())
+        return RoachesEnvironmentInterface()
     elif map_name == 'MoveToBeacon':
         return BeaconEnvironmentInterface()
     elif map_name == 'BuildMarines':
-        return EmbeddingInterfaceWrapper(TrainMarines())
+        return TrainMarines()
     else:
         raise Exception('Unsupported Map')
 
@@ -60,6 +60,7 @@ class AgentRunner:
                                           gamma=self.model_params['gamma'],
                                           td_lambda=self.model_params['td_lambda'],
                                           learning_rate=self.model_params['learning_rate'])
+
 
     # ------------------------ TRAINING ------------------------
 
@@ -140,48 +141,62 @@ class AgentRunner:
             rollouts[i].add_step(feature=agent_features[i])
 
         if collect_metadata:
+            rgb = np.array(meta_collector['meta_map_features'])[...,[PlayerRelative.ENEMY, PlayerRelative.SELF]]
+            # rgb = np.array(meta_collector['meta_map_features'])[...,[PlayerRelative.NEUTRAL, PlayerRelative.SELF]]
+
             # Write the end of conv_body and the end of spatial head
             self.write_video('meta_conv_body_output', meta_collector)
             self.write_video('meta_spatial_2d', meta_collector)
 
             # ----- PROJECTED SPATIAL PROBS --------
-            frames = np.array(meta_collector['meta_spatial_2d'])
-            arr = self.normalize_frames(frames, name='meta_spatial_probs')
-
-            input_states = np.array(meta_collector['meta_map_features'])
-            three_channel = np.concatenate([arr, input_states[:,:,:,[PlayerRelative.NEUTRAL, PlayerRelative.SELF]]], axis=-1)
-
-            # skvideo.io.vwrite('vids/map-{}.mp4'.format(self.episode_count), 
-            #     (three_channel * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})
+            self.write_video('meta_spatial_2d', meta_collector, rgb_overlay=rgb)
 
         return rollouts
 
-    def normalize_frames(self, frames, name="", debug=True):
+    def normalize_frames(self, frames, name=""):
         f_min = np.min(frames, (0,1,2,))
         f_max = np.max(frames, (0,1,2,))
         f_range = f_max - f_min + 1e-12
         arr = (frames - f_min) / f_range
 
-        if debug:
+        if name != "":
             print("DEBUG: {} range/min/max\n\t".format(name), f_range, f_min, f_max)
         return arr
 
-    def write_video(self, name, meta_collector):
+    def flatten_channels_2d(self,arr):
+        batch, yd, xd, n_channels = arr.shape
+        data = arr.transpose(0, 3, 1, 2) # change to [batch, channels, y,x]
+        out_y_dim = int(n_channels / 2)
+        new_shape = data.reshape(-1, 2, yd*out_y_dim, xd)
+        new_shapeT = new_shape.transpose(1,3,2,0) # [2, x, y*n, batch]
+        concat = np.concatenate(new_shapeT) #[x*2, y*n, batch]
+        return concat.transpose(2,1,0) #[batch, y*n, x*2]
+
+    def write_video(self, name, meta_collector, rgb_overlay=None):
         # ----- LAST CONV LAYER --------
         frames = np.array(meta_collector[name])
         arr = self.normalize_frames(frames, name=name)
 
-        _, yd, xd, n_channels = arr.shape
+        batch, yd, xd, n_channels = arr.shape
+
+        if n_channels % 2 != 0:
+            arr = np.concatenate([arr, np.zeros((batch, yd, xd, 1))], axis=-1)
+
+        batch, yd, xd, n_channels = arr.shape
 
         if n_channels > 1:
-            data = arr.transpose(0, 3, 1, 2) # change to [batch, channels, y,x]
-            out_y_dim = int(n_channels / 2)
-            new_shape = data.reshape(-1, 2, yd*out_y_dim, xd)
-            new_shapeT = new_shape.transpose(1,3,2,0) # [2, x, y*n, batch]
-            concat = np.concatenate(new_shapeT) #[x*2, y*n, batch]
-            output = concat.transpose(2,1,0) #[batch, y*2, x*2]
+            output = self.flatten_channels_2d(arr)
         else:
             output = arr
+
+
+        if rgb_overlay is not None:
+            g_overlay = np.stack([rgb_overlay[...,0]] * n_channels, axis=-1)
+            b_overlay = np.stack([rgb_overlay[...,1]] * n_channels, axis=-1)
+            g_ch = self.flatten_channels_2d(g_overlay)
+            b_ch = self.flatten_channels_2d(b_overlay)
+            output = np.stack([output, g_ch, b_ch], axis=-1)
+            name = name + "-rgb"
 
         # skvideo.io.vwrite('vids/{}-{}.mp4'.format(name, self.episode_count), 
         #     (output * 255).astype(np.uint8), outputdict={"-pix_fmt":"yuv420p"})

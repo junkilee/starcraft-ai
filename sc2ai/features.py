@@ -102,7 +102,6 @@ class HealthMapFeature(MapFeature):
     def _num_channels(self): #override
         return 1
 
-
 class StateExtractor(ABC):
 
     @abstractmethod

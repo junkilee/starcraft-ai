@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 python3 -m sc2ai.train \
---map MoveToBeacon \
---save_name beacon \
---step_mul 8 \
+--map DefeatRoaches \
+--save_name mvr \
+--step_mul 16 \
 --norender \
 --load_model \
 --parallel 1 \

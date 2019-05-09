@@ -1,4 +1,4 @@
-rm saves/beacon/*
+rm saves/mvr/*
 rm vids/*
 rm tboard/train/*
 ./bin/train	
