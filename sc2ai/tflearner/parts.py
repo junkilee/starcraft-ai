@@ -76,8 +76,12 @@ def actor_spatial_head(features, screen_dim, num_spatial_actions, name='actor_sp
             # Softmax each 84x84 channel by (reshape [-1,84x84,ch] -> softmax -> reshape [-1,84,84,ch])
             probs_flat = tf.reshape(probs_2d, [-1, screen_dim * screen_dim, num_spatial_actions])
             softmax_temp = 0.001 # Temperature - Use your actions early!
+            uniform_prob = 0.1
             print("DEBUG: Temperature", softmax_temp)
+            print("DEBUG: Uniform Prob", uniform_prob)
             softmax_flat = tf.nn.softmax(probs_flat / softmax_temp, axis=1)
+            uniform = tf.ones_like(softmax_flat) / (screen_dim * screen_dim)
+            softmax_with_uniform = softmax_flat * (1.0 - uniform_prob) + uniform * uniform_prob
             softmax_probs_2d = tf.reshape(softmax_flat, [-1, screen_dim, screen_dim, num_spatial_actions])
             
             return softmax_probs_2d
