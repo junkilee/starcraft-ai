@@ -224,6 +224,11 @@ class ConvAgent(InterfaceAgent):
         # x_probs = np.expand_dims(spatial_probs[0,0,:,0], axis=0) #[batch, 84] 
         # y_probs = np.expand_dims(spatial_probs[1,0,:,0], axis=-1) #[84, batch] 
         # self.meta['meta_spatial_probs'] = np.expand_dims(x_probs * y_probs, axis=0)
+
+        # out_str = ""
+        # for a,p in zip([a.sc2_function.name for a in self.interface.actions], nonspatial_probs[0]):
+        #     out_str += "{}:{:.4f}    ".format(a,p)
+        # print(out_str)
         
         self.steps += 1
 

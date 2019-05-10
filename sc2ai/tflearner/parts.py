@@ -145,7 +145,10 @@ def actor_nonspatial_head(features, action_mask, num_actions, name='actor_nonspa
                           name='conv_combine')
 
             features =  tf.layers.flatten(features)
-        probs = tf.layers.dense(features, units=num_actions, activation=tf.nn.softmax, name='output')
+        feature_probs = tf.layers.dense(features, units=num_actions, activation=tf.nn.softmax, name='output')
+    uniform_prob = 0.1
+    uniforms = tf.ones_like(feature_probs) / num_actions
+    probs = uniforms * uniform_prob + feature_probs * (1.0 - uniform_prob)
     masked = (probs + 1e-10) * action_mask
     return masked / tf.reduce_sum(masked, axis=1, keepdims=True)
 
