@@ -109,69 +109,77 @@ class HealthMapFeature(MapFeature):
     def _num_channels(self): #override
         return 1
 
-class StateExtractor(ABC):
+class SelectedMapFeature(MapFeature):
+    def extract_from_state(self, timestep): #override
+        selected = np.array(timestep.observation.feature_screen.selected).astype(np.float32)
+        return self._channels_last(np.stack([selected], axis=0))
 
-    @abstractmethod
-    def convert_state(self, timestep):
-        pass
+    def _num_channels(self): #override
+        return 1
 
-    @abstractmethod
-    def shape(self):
-        """
-        :return List[Int] size of input
-        """
-        pass
+# class StateExtractor(ABC):
 
-    def dummy_state(self):
-        return np.zeros(self.output_shape)
+#     @abstractmethod
+#     def convert_state(self, timestep):
+#         pass
 
-class FeatureUnitExtractor(StateExtractor, ABC):
+#     @abstractmethod
+#     def shape(self):
+#         """
+#         :return List[Int] size of input
+#         """
+#         pass
 
-    """ @override """
-    def convert_state(self, timestep):
-        columns = self._feature_unit_cols()
-        unit_info = np.array(timestep.observation.feature_units)[:,columns]
+#     def dummy_state(self):
+#         return np.zeros(self.output_shape)
 
-        return FeatureUnitState(unit_info)
+# class FeatureUnitExtractor(StateExtractor, ABC):
 
-    """ @override """
-    def shape(self):
-        # [num_units, num_cols]
-        num_cols = len(self._feature_unit_cols())
-        return (None, num_cols)
+#     """ @override """
+#     def convert_state(self, timestep):
+#         columns = self._feature_unit_cols()
+#         unit_info = np.array(timestep.observation.feature_units)[:,columns]
 
-    @abstractmethod
-    def _feature_unit_cols(self):
-        pass
+#         return FeatureUnitState(unit_info)
+
+#     """ @override """
+#     def shape(self):
+#         # [num_units, num_cols]
+#         num_cols = len(self._feature_unit_cols())
+#         return (None, num_cols)
+
+#     @abstractmethod
+#     def _feature_unit_cols(self):
+#         pass
 
        
-class UnitPositionsExtractor(FeatureUnitExtractor):
+# class UnitPositionsExtractor(FeatureUnitExtractor):
 
-    """ @override """
-    def _feature_unit_cols(self):
-        return np.array([
-            FeatureUnit.x,
-            FeatureUnit.y,
-        ])
+#     """ @override """
+#     def _feature_unit_cols(self):
+#         return np.array([
+#             FeatureUnit.x,
+#             FeatureUnit.y,
+#         ])
 
-class UnitTypeExtractor(FeatureUnitExtractor):
+# class UnitTypeExtractor(FeatureUnitExtractor):
 
-    """ @override """
-    def convert_state(self, timestep):
-        return self._get_one_hot_unit_type(timestep)
+#     """ @override """
+#     def convert_state(self, timestep):
+#         return self._get_one_hot_unit_type(timestep)
 
-    """ @override """
-    def shape(self):
-        # [num_units, num_cols]
-        num_cols = len(static_data.UNIT_TYPES) + 1 # add option for unknown unit
-        return (None, num_cols)
+#     """ @override """
+#     def shape(self):
+#         # [num_units, num_cols]
+#         num_cols = len(static_data.UNIT_TYPES) + 1 # add option for unknown unit
+#         return (None, num_cols)
 
-    def _get_one_hot_unit_type(self, timestep):
-        num_unit_types = self.output_shape()[1]
-        blizzard_unit_type = np.array(timestep.observation.feature_units)[:, FeatureUnit.unit_type]
-        pysc2_unit_type = np.array(
-            [static_data.UNIT_TYPES.index(t) if t in static_data.UNIT_TYPES else 0 for t in blizzard_unit_type]
-        )
-        one_hot_unit_types = np.eye(num_unit_types)[pysc2_unit_type]
+#     def _get_one_hot_unit_type(self, timestep):
+#         num_unit_types = self.output_shape()[1]
+#         blizzard_unit_type = np.array(timestep.observation.feature_units)[:, FeatureUnit.unit_type]
+#         pysc2_unit_type = np.array(
+#             [static_data.UNIT_TYPES.index(t) if t in static_data.UNIT_TYPES else 0 for t in blizzard_unit_type]
+#         )
+#         one_hot_unit_types = np.eye(num_unit_types)[pysc2_unit_type]
 
-        return one_hot_unit_types
+#         return one_hot_unit_types

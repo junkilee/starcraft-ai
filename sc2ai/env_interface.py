@@ -126,6 +126,7 @@ class RoachesEnvironmentInterface(EnvironmentInterface):
         return [
             PlayerRelativeMapFeature(),
             HealthMapFeature(),
+            SelectedMapFeature(),
         ]
 
 class TrainMarines(EnvironmentInterface):
