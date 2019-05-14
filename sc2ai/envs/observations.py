@@ -4,39 +4,82 @@ from pysc2.lib import features
 from abc import ABC, abstractmethod
 import numpy as np
 import sc2ai as game_info
-from gym.spaces.multi_discrete import MultiDiscrete
+from gym.spaces.dict_space import Dict
+from gym.spaces.box import Box
+from gym.spaces.tuple_space import Tuple
 
-class ObservationList:
+class ObservationSet(ABC):
+    @abstractmethod
+    def generate_observation(self, observation):
+        """Generate a gym consumable observation instance from the pysc2 observation output.
+
+        Args:
+            observation: a named dict containing named numpy array coming from pysc2.
+
+        Returns:
+            a dictionary containing observation in numpy array format.
+        """
+        pass
+
+    @abstractmethod
+    def convert_to_gym_observation_spaces(self):
+        """Generate a set of gym observation spaces from the given set of Observation Filters.
+
+        Returns:
+            a gym Space representing the given set of the Observation Filters.
+        """
+        pass
+
+
+class CategorizedObservationSet(ObservationSet):
+    """An observation set which outputs a Dict gym space which
+
+    """
     def __init__(self, filters_list):
-        self.filters_list = filters_list
+        self._filters_list = filters_list
+        self._categories = []
+        for f in self.filters_list:
+            if f.category not in self._categories:
+                self._categories += f.category
 
     def generate_observation(self, observation):
         observation_outputs = []
+        output_dict = {}
 
-        for filter in self.filters_list:
-            observation_outputs.add(filter.filter(observation))
+        for f in self.filters_list:
+            observation_outputs.add(f.filter(observation))
 
         return observation_outputs
 
     def convert_to_gym_observation_spaces(self):
-        filters_list = []
+        observation_dict = {}
+        for category in self._categories:
+            observation_dict[category] = []
+        for f in self.filters_list:
+            observation_dict[filter.cateogry] += [f.get_space()]
+        return Dict()
 
-        for filter in self.filters_list:
-            filters_list.add(filter.get_space())
-
-        return MultiDiscrete()
 
 class ObservationFilter(ABC):
     """An abstract class for every observation filer."""
-    def __init__(self, name):
-        self.name = name
+    def __init__(self, category, name):
+        self._category = category
+        self._name = name
+
+    @property
+    def category(self):
+        return self._category
+
+    @property
+    def name(self):
+        return self._name
 
     @abstractmethod
-    def get_space(self):
+    def __call__(self, observation):
         pass
 
     @abstractmethod
-    def filter(self, observation):
+    def get_space(self):
         pass
 
 
@@ -44,15 +87,16 @@ class FeatureScreenFilter(ObservationFilter):
     """An abstract class for feature screen filters.
     Filters a feature screen information into something meaningful and outputs a same size map with processed data.
     """
-    def __init__(self, name, feature_screen_size = game_info.feature_screen_size):
-        self.feature_screen_size = feature_screen_size
-        super().__init__(name)
+    def __init__(self, category, name, feature_screen_size = game_info.feature_screen_size):
+        self._feature_screen_size = feature_screen_size
+        super().__init__(category, name)
 
     def get_space(self):
-        return [self.feature_screen_size, self.feature_screen_size]
+        return np.array([self._feature_screen_size, self._feature_screen_size])
 
-    def filter(self, observation):
+    def __call__(self, observation):
         raise NotImplementedError()
+
 
 class FeatureMinimapFilter(ObservationFilter):
     """An abstract class for feature minimap filters.
@@ -65,54 +109,41 @@ class FeatureMinimapFilter(ObservationFilter):
     def get_space(self):
         return [self.feature_minimap_size, self.feature_minimap_size]
 
-    def filter(self, observation):
+    def __call__(self, observation):
         raise NotImplementedError()
+
 
 class FeatureScreenPlayerRelativeFilter(FeatureScreenFilter):
     """Outputs a filtered map of the player relative information"""
-    def __init__(self, name):
+    def __init__(self, name, filter_value):
         super().__init__(name)
+        self._filter_value = filter_value
 
-    def filter(self, observation, filter_value):
-        """Filters out a filter value from the features player relative array.
-
-        Args:
-            observation: a named list of numpy arrays coming from the environment's step method.
-            filter_value: a value for filtering the feature plane's player relative map. If it matches the value then
-                          output is 1 otherwise 0.
-
-        Returns:
-            A numpy array
-        """
+    def _filter(self, observation):
         player_relative = observation.feature_screen.player_relative
-        output = (player_relative == filter_value).astype(np.float32)
-        return output
+        return (player_relative == self._filter_value).astype(np.float32)
+
+    def __call__(self, observation):
+        return self._filter(observation)
 
 
 class FeatureScreenSelfUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out self units as ones and otherwise zeros"""
     def __init__(self):
-        super().__init__("Feature-Screen-Self-Unit")
-
-    def filter(self, observation):
-        return super().filter(observation, filter_vallue=features.PlayerRelative.SELF)
+        super().__init__("Feature-Screen-Self-Unit", filter_vallue=features.PlayerRelative.SELF)
 
 
 class FeatureScreenEnemyUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out enemy units as ones and otherwise zeros"""
     def __init__(self):
-        super().__init__("Feature-Screen-Self-Unit")
+        super().__init__("Feature-Screen-Self-Unit", filter_vallue=features.PlayerRelative.ENEMY)
 
-    def filter(self, observation):
-        return super().filter(observation, filter_vallue=features.PlayerRelative.ENEMY)
 
 class FeatureScreenNeuralUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out neutral units as ones and otherwise zeros"""
     def __init__(self):
-        super().__init__("Feature-Screen-Self-Unit")
+        super().__init__("Feature-Screen-Self-Unit", filter_vallue=features.PlayerRelative.NEUTRAL)
 
-    def filter(self, observation):
-        return super().filter(observation, filter_vallue=features.PlayerRelative.NEUTRAL)
 
 class FeatureScreenUnitHitPointFilter(FeatureScreenFilter):
     """Filters out neutral units as ones and otherwise zeros"""
