@@ -93,8 +93,10 @@ class DefaultActionSet(ActionSet):
         """
         action_list = []
         for func in actions.FUNCTIONS:
-            action_list += [AtomAction.factory(func)]
-        raise cls(action_list)
+            cls_ = AtomAction.factory(func)
+            globals()[cls_.__name__] = cls_
+            action_list.append(cls_)
+        return cls(action_list)
 
     def transform_action(self, observation, action_values):
         action_id = action_values[0]
@@ -154,15 +156,12 @@ class AtomAction(Action):
 
     @classmethod
     def factory(cls, pysc2_function):
-        """A Factory method is create an atom action based on """
+        """A Factory method to create an atom action based on pysc2 actions"""
 
         def __init__(self, **kwargs):
-            super().__init__(pysc2_function, **kwargs)
+            super(self.__class__, self).__init__(pysc2_function, **kwargs)
 
-        names = pysc2_function.name.split('_')
-        new_name = ""
-        for name in names:
-            new_name += name.capitalize()
+        new_name = "".join(map(str.capitalize, pysc2_function.name.split('_'))) + "Action"
         return type(new_name, (AtomAction,), {'__init__': __init__})
 
     def get_pysc2_action_ids(self):

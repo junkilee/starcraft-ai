@@ -61,7 +61,10 @@ class CategorizedObservationSet(ObservationSet):
 
 
 class ObservationFilter(ABC):
-    """An abstract class for every observation filer."""
+    """An abstract class for every observation filer.
+
+    Currently the filter set only supports single-depth categories.
+    """
     def __init__(self, category, name):
         self._category = category
         self._name = name
@@ -87,9 +90,9 @@ class FeatureScreenFilter(ObservationFilter):
     """An abstract class for feature screen filters.
     Filters a feature screen information into something meaningful and outputs a same size map with processed data.
     """
-    def __init__(self, category, name, feature_screen_size = game_info.feature_screen_size):
+    def __init__(self, name, feature_screen_size = game_info.feature_screen_size):
         self._feature_screen_size = feature_screen_size
-        super().__init__(category, name)
+        super().__init__("feature_screen", name)
 
     def get_space(self):
         return np.array([self._feature_screen_size, self._feature_screen_size])
@@ -104,10 +107,10 @@ class FeatureMinimapFilter(ObservationFilter):
     """
     def __init__(self, name, feature_minimap_size = game_info.feature_minimap_size):
         self.feature_minimap_size = feature_minimap_size
-        super().__init__(name)
+        super().__init__("feature_minimap", name)
 
     def get_space(self):
-        return [self.feature_minimap_size, self.feature_minimap_size]
+        return np.array((self.feature_minimap_size, self.feature_minimap_size]))
 
     def __call__(self, observation):
         raise NotImplementedError()
@@ -125,7 +128,6 @@ class FeatureScreenPlayerRelativeFilter(FeatureScreenFilter):
 
     def __call__(self, observation):
         return self._filter(observation)
-
 
 class FeatureScreenSelfUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out self units as ones and otherwise zeros"""
