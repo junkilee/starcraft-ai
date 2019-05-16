@@ -2,6 +2,9 @@ from abc import ABC, abstractmethod
 from pysc2.lib import actions
 from sc2ai.envs import game_info
 from gym.spaces.multi_discrete import MultiDiscrete
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def retrieve_parameter_size_vector(arg_type, feature_screen_size, feature_minimap_size):
@@ -72,6 +75,7 @@ class DefaultActionSet(ActionSet):
         self._parameter_registry = self.register_argument_types()
         self._feature_screen_size = feature_screen_size
         self._feature_minimap_size = feature_minimap_size
+        self._no_op_action = NoOpAction()
 
     def register_argument_types(self):
         registry = {}
@@ -104,15 +108,19 @@ class DefaultActionSet(ActionSet):
         if self._reorder_action_id:
             raise NotImplementedError()
         else:
+            if action_id < 0 or action_id > len(self._action_list):
+                logger.error("The wrong action ID %d from the network output", action_id)
+                raise Exception("The wrong action ID. {}".format(action_id))
+            if not self._current_available_actions[action_id]:
+
             action = self._action_list[action_id]
             parameter_types = action.arg_types
             parameter_values = []
             for parameter_type in parameter_types:
-                id = self._parameter_registry[parameter_type]
-                parameter_values += [action_values[1 + id]]
+                parameter_values += [action_values[1 + self._parameter_registry[parameter_type]]]
             transformed_action = action.transform_action(observation, parameter_values)
 
-        return transformed_action
+        return [transformed_action]
 
     def convert_to_gym_action_spaces(self):
         vector = [0] * (1 + len(self._parameter_registry))
@@ -177,6 +185,11 @@ class AtomAction(Action):
         return self.function_tuple(*arg_values)
 
 
+class NoOpAction(AtomAction):
+    def __init__(self, **kwargs):
+        super().__init__(actions.FUNCTIONS.no_op, **kwargs)
+
+
 class SelectPointAction(AtomAction):
     def __init__(self, **kwargs):
         super().__init__(actions.FUNCTIONS.select_point, **kwargs)
@@ -185,3 +198,12 @@ class SelectPointAction(AtomAction):
 class SelectRectAction(AtomAction):
     def __init__(self, **kwargs):
         super().__init__(actions.FUNCTIONS.select_point, **kwargs)
+
+class SelectArmyAction(AtomAction):
+    def __init__(self, **kwargs):
+        super().__init__(actions.FUNCTIONS.select_army, **kwargs)
+
+
+class MoveScreenAction(AtomAction):
+    def __init__(self, **kwargs):
+        super().__init__(actions.FUNCTIONS.move_screen, **kwargs)
