@@ -1,4 +1,5 @@
-"""A set of observation filters which convert observation features from pysc2 to processed numpy arrays
+"""A set of observation filters which convert observation features from pysc2
+   to processed numpy arrays
 """
 from pysc2.lib import features
 from abc import ABC, abstractmethod
@@ -8,7 +9,11 @@ from gym.spaces.dict_space import Dict
 from gym.spaces.box import Box
 from gym.spaces.tuple_space import Tuple
 
+
 class ObservationSet(ABC):
+    def __init__(self, filters_list):
+        self._filters_list = filters_list
+
     @abstractmethod
     def generate_observation(self, observation):
         """Generate a gym consumable observation instance from the pysc2 observation output.
@@ -32,32 +37,40 @@ class ObservationSet(ABC):
 
 
 class CategorizedObservationSet(ObservationSet):
-    """An observation set which outputs a Dict gym space which
-
+    """An observation set which outputs a Dict gym space.
     """
     def __init__(self, filters_list):
-        self._filters_list = filters_list
+        super().__init__(filters_list)
         self._categories = []
-        for f in self.filters_list:
+        for f in self._filters_list:
             if f.category not in self._categories:
                 self._categories += f.category
 
     def generate_observation(self, observation):
-        observation_outputs = []
         output_dict = {}
-
-        for f in self.filters_list:
-            observation_outputs.add(f.filter(observation))
-
-        return observation_outputs
+        for category in self._categories:
+            output_dict[category] = []
+        for f in self._filters_list:
+            output_dict[f.category].append(f(observation))
+        for category in self._categories:
+            if len(output_dict[category]) > 1:
+                output_dict[category] = np.stack(output_dict[category])
+            else:
+                output_dict[category] = output_dict[category][0]
+        return output_dict
 
     def convert_to_gym_observation_spaces(self):
-        observation_dict = {}
+        output_dict = {}
         for category in self._categories:
-            observation_dict[category] = []
-        for f in self.filters_list:
-            observation_dict[filter.cateogry] += [f.get_space()]
-        return Dict()
+            output_dict[category] = []
+        for f in self._filters_list:
+            output_dict[f.cateogry] += [f.get_space()]
+        for category in self._categories:
+            if len(output_dict[category]) > 1:
+                output_dict[category] = np.stack(output_dict[category])
+            else:
+                output_dict[category] = output_dict[category][0]
+        return output_dict
 
 
 class ObservationFilter(ABC):
@@ -95,7 +108,7 @@ class FeatureScreenFilter(ObservationFilter):
         super().__init__("feature_screen", name)
 
     def get_space(self):
-        return np.array([self._feature_screen_size, self._feature_screen_size])
+        return np.array((self._feature_screen_size, self._feature_screen_size))
 
     def __call__(self, observation):
         raise NotImplementedError()
@@ -110,7 +123,7 @@ class FeatureMinimapFilter(ObservationFilter):
         super().__init__("feature_minimap", name)
 
     def get_space(self):
-        return np.array((self.feature_minimap_size, self.feature_minimap_size]))
+        return np.array((self.feature_minimap_size, self.feature_minimap_size))
 
     def __call__(self, observation):
         raise NotImplementedError()
@@ -128,6 +141,7 @@ class FeatureScreenPlayerRelativeFilter(FeatureScreenFilter):
 
     def __call__(self, observation):
         return self._filter(observation)
+
 
 class FeatureScreenSelfUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out self units as ones and otherwise zeros"""
@@ -152,7 +166,7 @@ class FeatureScreenUnitHitPointFilter(FeatureScreenFilter):
     def __init__(self):
         super().__init__("Feature-Screen-Self-Unit")
 
-    def filter(self, observation):
+    def _filter(self, observation):
         """Filters out a filter value from the features player unit hit point (HP) array.
         We especially pick a ratio version of this and then rescale for the values to stay between zero and one.
 
@@ -163,3 +177,6 @@ class FeatureScreenUnitHitPointFilter(FeatureScreenFilter):
             A numpy array
         """
         return observation.feature_screen.unit_hit_points_ratio / 256.0
+
+    def __call__(self, observation):
+        return self._filter(observation)

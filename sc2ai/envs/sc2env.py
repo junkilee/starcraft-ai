@@ -56,7 +56,7 @@ class SingleAgentSC2Env(gym.Env):
 
     _owns_render = True
 
-    def __init__(self, map_name = None, **kwargs):
+    def __init__(self, map_name, action_set, observation_set, **kwargs):
         super().__init__()
         self._map_name = map_name
         self._env_options = default_env_options._replace(kwargs)
@@ -64,6 +64,8 @@ class SingleAgentSC2Env(gym.Env):
         self._available_actions = None
         self._observation_spec = None
         self._seed = None
+        self._action_set = action_set
+        sefl._observation_set = observation_set
 
     def _init_sc2_env(self):
         """
@@ -150,13 +152,13 @@ class SingleAgentSC2Env(gym.Env):
         :return:
         """
 
-        if action[0] not in self._available_actions:
-            logging.warning("The chosen action is not available: %s", action)
-            action = [ActionIDs.NO_OP]
+        # if action[0] not in self._available_actions:
+        #     logging.warning("The chosen action is not available: %s", action)
+        #     action = [ActionIDs.NO_OP]
 
         try:
             # Only observing the first player's timestep
-            timestep = self._sc2_env.step([actions.FunctionCall(action[0], action[1:])])[0]
+            timestep = self._sc2_env.step([action])[0]
         except KeyboardInterrupt:
             logging.info("Keyboard Interruption.")
             return None, 0, True, {}
@@ -182,9 +184,9 @@ class SingleAgentMiniGameEnv(SingleAgentSC2Env):
         map_name:
         **kwargs:
     """
-    def __init__(self, map_name, **kwargs):
+    def __init__(self, map_name, action_set, observation_set, **kwargs):
         assert isinstance(map_name, str)
-        super().__init__(map_name, **kwargs)
+        super().__init__(map_name, action_set, observation_set, **kwargs)
 
     def _reset(self):
         timestep = super()._reset()
