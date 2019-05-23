@@ -1,15 +1,16 @@
+import numpy as np
 import logging
-
 import gym
 from gym.utils import closer
 
+logger = logging.getLogger(__name__)
 env_closer = closer.Closer()
 
 from pysc2.env import sc2_env
 from pysc2.env.environment import StepType
 from .game_info import default_env_options
 import sc2ai.envs.minigames as minigames
-import numpy as np
+from sc2ai.envs.rewards import RewardProcessor
 
 
 MAP_ENV_MAPPINGS = {
@@ -27,7 +28,6 @@ def make_sc2env(**kwargs):
     Returns:
 
     """
-    cls = None
     if kwargs["map"] not in MAP_ENV_MAPPINGS:
         raise Exception("The map is unknown and not registered.")
     else:
@@ -51,20 +51,23 @@ class SingleAgentSC2Env(gym.Env):
 
     _owns_render = True
 
-    def __init__(self, map_name, action_set, observation_set, **kwargs):
+    def __init__(self, map_name, action_set, observation_set, reward_processor=RewardProcessor(), **kwargs):
         super().__init__()
         self._map_name = map_name
         self._env_options = default_env_options._replace(kwargs)
         self._sc2_env = None
-        self._available_actions = None
-        self._observation_spec = None
         self._seed = None
+        self._observation_spec = None
         self._action_set = action_set
-        sefl._observation_set = observation_set
+        self._action_space = None
+        self._observation_spec = None
+        self._observation_set = observation_set
+        self._observation_space = None
+        self._reward_processor = reward_processor
 
     def _init_sc2_env(self):
         """
-        Initializes
+        Initializes the PySC2 environment
 
         Returns:
 
@@ -88,10 +91,8 @@ class SingleAgentSC2Env(gym.Env):
             disable_fog=self._env_options.disable_fog,
             visualize=self._env_options.render)
         self._observation_spec = self._sc2_env.observation_spec()
-        self._action_space = None
-        self._observation_space = None
-        self._available_actions = None
-
+        self._action_space = self._action_set.convert_to_gym_action_spaces()
+        self._observation_space = self._observation_set.convert_to_gym_observation_spaces()
 
     def render(self, mode='human', close=False):
         """
@@ -127,10 +128,21 @@ class SingleAgentSC2Env(gym.Env):
         if self._sc2_env is None:
             self._init_sc2_env()
         return self._observation_spec
-    
+
     @property
-    def available_actions(self):
-        return self._available_actions
+    def action_space(self):
+        if self._sc2_env is None:
+            self._init_sc2_env()
+        return self._action_space
+
+    @property
+    def observation_space(self):
+        if self._sc2_env is None:
+            self._init_sc2_env()
+        return self._observation_space
+
+    def _process_reward(self, reward, raw_obs):
+        return self._reward_processor.process(reward, raw_obs)
 
     def seed(self, seed=None):
         """
@@ -139,18 +151,20 @@ class SingleAgentSC2Env(gym.Env):
         :return:
         """
         self._seed = seed
+
+    def step(self, actions):
+        total_reward = 0
+        transformed_actions = self._action_space.transform_action(actions)
+        for action in transformed_actions:
+            raw_obs, reward, done, info = self._single_step(self, action)
+            total_reward += self._process_reward(reward, raw_obs)
+            if done:
+                break
+        self._action_set.update_available_actions(raw_obs.available_actions)
+        obs = self._observation_set.transform_observation(raw_obs)
+        return obs, total_reward, done, info
     
-    def step(self, action):
-        """
-
-        :param action: Expects a tuple which has a specification of an action containing a kind and arguments.
-        :return:
-        """
-
-        # if action[0] not in self._available_actions:
-        #     logging.warning("The chosen action is not available: %s", action)
-        #     action = [ActionIDs.NO_OP]
-
+    def _single_step(self, action):
         try:
             # Only observing the first player's timestep
             timestep = self._sc2_env.step([action])[0]
@@ -160,58 +174,13 @@ class SingleAgentSC2Env(gym.Env):
         except Exception:
             logging.exception("An unexpected exception occured.")
             return None, 0, True, {}
-        self._available_actions = timestep.observation['available_actions']
         reward = timestep.reward
         return timestep.observation, reward, timestep.step_type == StepType.LAST, {}
 
     def reset(self):
         if self._sc2_env is None:
             self._init_sc2_env()
-        obs = self._sc2_env.reset()[0]
-        self._available_actions = obs.observation['available_actions']
-        return obs.observation
-
-
-class SingleAgentMiniGameEnv(SingleAgentSC2Env):
-    """Providing a wrapper for minigames. Mainly supports preprocessing of both reward and observation.
-
-    Args:
-        map_name:
-        **kwargs:
-    """
-    def __init__(self, map_name, action_set, observation_set, **kwargs):
-        assert isinstance(map_name, str)
-        super().__init__(map_name, action_set, observation_set, **kwargs)
-
-    def _reset(self):
-        timestep = super()._reset()
-        return self._process_observation(self, obs)
-
-    def _step(self, action):
-        raw_obs, reward, done, info = super()._step(self, action)
-        reward = self._process_reward(reward, raw_obs)
-        obs = self._process_observation(raw_obs)
-        return obs, reward, done, info
-
-    def _process_reward(self, reward, raw_obs):
-        raise NotImplementedError
-
-    def _process_observation(self, raw_obs):
-        raise NotImplementedError
-
-class MultiStepSingleAgentMiniGameEnv(SingleAgentMiniGameEnv):
-    """
-    Instead of taking one action per step, it handles a list of consecutive actions.
-    """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def _step(self, actions):
-        total_reward = 0
-        for action in actions:
-            raw_obs, reward, done, info = super().__step(self, action)
-            total_reward += self._process_reward(reward, raw_obs)
-            if done:
-                break
-        obs = self._process_observation(raw_obs)
-        return obs, total_reward, done, info
+        raw_obs = self._sc2_env.reset()[0].observation
+        self._action_set.update_available_actions(raw_obs.available_actions)
+        obs = self._observation_set.transform_observation(raw_obs)
+        return obs

@@ -5,9 +5,12 @@ from pysc2.lib import features
 from abc import ABC, abstractmethod
 import numpy as np
 import sc2ai as game_info
+import logging
 from gym.spaces.dict_space import Dict
 from gym.spaces.box import Box
 from gym.spaces.tuple_space import Tuple
+
+logger = logging.getLogger(__name__)
 
 
 class ObservationSet(ABC):
@@ -15,8 +18,8 @@ class ObservationSet(ABC):
         self._filters_list = filters_list
 
     @abstractmethod
-    def generate_observation(self, observation):
-        """Generate a gym consumable observation instance from the pysc2 observation output.
+    def transform_observation(self, observation):
+        """transform into a gym consumable observation instance from the pysc2 observation output.
 
         Args:
             observation: a named dict containing named numpy array coming from pysc2.
@@ -47,7 +50,7 @@ class CategorizedObservationSet(ObservationSet):
             if f.category not in self._categories:
                 self._categories += (f.category,)
 
-    def generate_observation(self, observation):
+    def transform_observation(self, observation):
         output_dict = {}
         if self._use_stacked:
             for category in self._categories:
