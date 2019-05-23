@@ -6,16 +6,11 @@ from gym.utils import closer
 env_closer = closer.Closer()
 
 from pysc2.env import sc2_env
-from pysc2.lib import actions
 from pysc2.env.environment import StepType
-
 from .game_info import default_env_options
-from .game_info import ActionIDs
 import sc2ai.envs.minigames as minigames
-
 import numpy as np
 
-from baselines import logger
 
 MAP_ENV_MAPPINGS = {
     "DefeatZerglings": minigames.DefeatZerglingsEnv,

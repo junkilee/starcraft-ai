@@ -39,37 +39,50 @@ class ObservationSet(ABC):
 class CategorizedObservationSet(ObservationSet):
     """An observation set which outputs a Dict gym space.
     """
-    def __init__(self, filters_list):
+    def __init__(self, filters_list, use_stacked = True):
         super().__init__(filters_list)
         self._categories = []
+        self._use_stacked = use_stacked
         for f in self._filters_list:
             if f.category not in self._categories:
-                self._categories += f.category
+                self._categories += (f.category,)
 
     def generate_observation(self, observation):
         output_dict = {}
-        for category in self._categories:
-            output_dict[category] = []
-        for f in self._filters_list:
-            output_dict[f.category].append(f(observation))
-        for category in self._categories:
-            if len(output_dict[category]) > 1:
-                output_dict[category] = np.stack(output_dict[category])
-            else:
-                output_dict[category] = output_dict[category][0]
+        if self._use_stacked:
+            for category in self._categories:
+                output_dict[category] = []
+            for f in self._filters_list:
+                output_dict[f.category] += (f(observation),)
+            for category in self._categories:
+                if len(output_dict[category]) > 1:
+                    output_dict[category] = np.stack(output_dict[category])
+                else:
+                    output_dict[category] = output_dict[category][0]
+        else:
+            for category in self._categories:
+                output_dict[category] = {}
+            for f in self._filters_list:
+                output_dict[f.category][f.name] = f(observation)
         return output_dict
 
     def convert_to_gym_observation_spaces(self):
         output_dict = {}
-        for category in self._categories:
-            output_dict[category] = []
-        for f in self._filters_list:
-            output_dict[f.cateogry] += [f.get_space()]
-        for category in self._categories:
-            if len(output_dict[category]) > 1:
-                output_dict[category] = np.stack(output_dict[category])
-            else:
-                output_dict[category] = output_dict[category][0]
+        if self._use_stacked:
+            for category in self._categories:
+                output_dict[category] = []
+            for f in self._filters_list:
+                output_dict[f.cateogry] += (f.get_space(),)
+            for category in self._categories:
+                if len(output_dict[category]) > 1:
+                    output_dict[category] = np.stack(output_dict[category])
+                else:
+                    output_dict[category] = output_dict[category][0]
+        else:
+            for category in self._categories:
+                output_dict[category] = {}
+            for f in self._filters_list:
+                output_dict[f.category][f.name] = f.get_space()
         return output_dict
 
 
@@ -146,25 +159,25 @@ class FeatureScreenPlayerRelativeFilter(FeatureScreenFilter):
 class FeatureScreenSelfUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out self units as ones and otherwise zeros"""
     def __init__(self):
-        super().__init__("Feature-Screen-Self-Unit", filter_vallue=features.PlayerRelative.SELF)
+        super().__init__("self_unit", filter_vallue=features.PlayerRelative.SELF)
 
 
 class FeatureScreenEnemyUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out enemy units as ones and otherwise zeros"""
     def __init__(self):
-        super().__init__("Feature-Screen-Self-Unit", filter_vallue=features.PlayerRelative.ENEMY)
+        super().__init__("enemy_unit", filter_vallue=features.PlayerRelative.ENEMY)
 
 
 class FeatureScreenNeuralUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out neutral units as ones and otherwise zeros"""
     def __init__(self):
-        super().__init__("Feature-Screen-Self-Unit", filter_vallue=features.PlayerRelative.NEUTRAL)
+        super().__init__("neutral_unit", filter_vallue=features.PlayerRelative.NEUTRAL)
 
 
 class FeatureScreenUnitHitPointFilter(FeatureScreenFilter):
     """Filters out neutral units as ones and otherwise zeros"""
     def __init__(self):
-        super().__init__("Feature-Screen-Self-Unit")
+        super().__init__("hit_points")
 
     def _filter(self, observation):
         """Filters out a filter value from the features player unit hit point (HP) array.
