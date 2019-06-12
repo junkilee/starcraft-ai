@@ -4,7 +4,7 @@
 from pysc2.lib import features
 from abc import ABC, abstractmethod
 import numpy as np
-import sc2ai as game_info
+from sc2ai.envs import game_info
 import logging
 from gym.spaces.dict_space import Dict
 from gym.spaces.box import Box

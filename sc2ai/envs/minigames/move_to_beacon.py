@@ -1,10 +1,6 @@
-import numpy as np
-from gym import spaces
-from pysc2.lib import actions, features
-
-from ..sc2env import SingleAgentSC2Env
-from ..actions import *
-from ..observations import *
+from sc2ai.envs.sc2env import SingleAgentSC2Env
+from sc2ai.envs.actions import *
+from sc2ai.envs.observations import *
 
 
 class MoveToBeaconEnv(SingleAgentSC2Env):

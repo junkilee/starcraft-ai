@@ -1,10 +1,10 @@
-from sc2ai.envs.sc2env import SingleAgentSC2Env
-from sc2ai.envs.actions import *
-from sc2ai.envs.observations import *
+from ..sc2env import SingleAgentSC2Env
+from ..actions import *
+from ..observations import *
 
 
-class DefeatZerglingsEnv(SingleAgentSC2Env):
-    """A class containing specifications for the CollectMineralsAndGas Minimap
+class BuildMarinesEnv(SingleAgentSC2Env):
+    """A class containing specifications for the MoveToBeacon Minimap
     """
     def __init__(self, **kwargs):
         action_set = DefaultActionSet([

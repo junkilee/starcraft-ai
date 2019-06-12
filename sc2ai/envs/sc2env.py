@@ -3,37 +3,16 @@ import logging
 import gym
 from gym.utils import closer
 
-logger = logging.getLogger(__name__)
-env_closer = closer.Closer()
-
 from pysc2.env import sc2_env
 from pysc2.env.environment import StepType
 from .game_info import default_env_options
-import sc2ai.envs.minigames as minigames
 from sc2ai.envs.rewards import RewardProcessor
 
+logger = logging.getLogger(__name__)
+env_closer = closer.Closer()
 
-MAP_ENV_MAPPINGS = {
-    "DefeatZerglings": minigames.DefeatZerglingsEnv,
-    "CollectMineralAndGas": minigames.DefeatCollectMinardAndGasEnv,
-    "MoveToBeacon": minigames.MoveToBeaconEnv
-}
 
-def make_sc2env(**kwargs):
-    """
 
-    Args:
-        **kwargs:
-
-    Returns:
-
-    """
-    if kwargs["map"] not in MAP_ENV_MAPPINGS:
-        raise Exception("The map is unknown and not registered.")
-    else:
-        cls = MAP_ENV_MAPPINGS[kwargs["map"]]
-
-    return gym.make(cls(**kwargs))
 
 class SingleAgentSC2Env(gym.Env):
     """A gym wrapper for PySC2's Starcraft II environment.
@@ -46,9 +25,6 @@ class SingleAgentSC2Env(gym.Env):
     reward_range = (-np.inf, np.inf)
     spec = None
 
-    action_space = None
-    observation_space = None
-
     _owns_render = True
 
     def __init__(self, map_name, action_set, observation_set, reward_processor=RewardProcessor(), **kwargs):
@@ -59,11 +35,15 @@ class SingleAgentSC2Env(gym.Env):
         self._seed = None
         self._observation_spec = None
         self._action_set = action_set
-        self._action_space = None
+        self._action_gym_space = None
+        self._observation_gym_space = None
         self._observation_spec = None
         self._observation_set = observation_set
-        self._observation_space = None
+        self._observation_gym_space = None
         self._reward_processor = reward_processor
+        self._current_raw_obs = None
+        self._current_obs = None
+
 
     def _init_sc2_env(self):
         """
@@ -91,8 +71,9 @@ class SingleAgentSC2Env(gym.Env):
             disable_fog=self._env_options.disable_fog,
             visualize=self._env_options.render)
         self._observation_spec = self._sc2_env.observation_spec()
-        self._action_space = self._action_set.convert_to_gym_action_spaces()
-        self._observation_space = self._observation_set.convert_to_gym_observation_spaces()
+        self._action_gym_space = self._action_set.convert_to_gym_action_spaces()
+        self._observation_gym_space = self._observation_set.convert_to_gym_observation_spaces()
+        self._current_obs = None
 
     def render(self, mode='human', close=False):
         """
@@ -130,16 +111,24 @@ class SingleAgentSC2Env(gym.Env):
         return self._observation_spec
 
     @property
-    def action_space(self):
+    def action_gym_space(self):
         if self._sc2_env is None:
             self._init_sc2_env()
-        return self._action_space
+        return self._action_gym_space
 
     @property
-    def observation_space(self):
+    def observation_gym_space(self):
         if self._sc2_env is None:
             self._init_sc2_env()
-        return self._observation_space
+        return self._observation_gym_space
+
+    @property
+    def current_obs(self):
+        return self._current_obs
+
+    @property
+    def current_raw_obs(self):
+        return self._current_raw_obs
 
     def _process_reward(self, reward, raw_obs):
         return self._reward_processor.process(reward, raw_obs)
@@ -154,14 +143,16 @@ class SingleAgentSC2Env(gym.Env):
 
     def step(self, actions):
         total_reward = 0
-        transformed_actions = self._action_space.transform_action(actions)
-        for action in transformed_actions:
-            raw_obs, reward, done, info = self._single_step(self, action)
+        for action in actions:
+            transformed_action = self._action_set.transform_action(action)
+            raw_obs, reward, done, info = self._single_step(self, transformed_action)
+            self._current_raw_obs = raw_obs
             total_reward += self._process_reward(reward, raw_obs)
             if done:
                 break
         self._action_set.update_available_actions(raw_obs.available_actions)
         obs = self._observation_set.transform_observation(raw_obs)
+        self._current_obs = obs
         return obs, total_reward, done, info
     
     def _single_step(self, action):
@@ -180,7 +171,7 @@ class SingleAgentSC2Env(gym.Env):
     def reset(self):
         if self._sc2_env is None:
             self._init_sc2_env()
-        raw_obs = self._sc2_env.reset()[0].observation
-        self._action_set.update_available_actions(raw_obs.available_actions)
-        obs = self._observation_set.transform_observation(raw_obs)
-        return obs
+        self._current_raw_obs = self._sc2_env.reset()[0].observation
+        self._action_set.update_available_actions(self._current_raw_obs.available_actions)
+        self._current_obs = self._observation_set.transform_observation(self._current_raw_obs)
+        return self._current_obs

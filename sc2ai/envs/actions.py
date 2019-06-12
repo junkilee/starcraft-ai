@@ -111,7 +111,7 @@ class DefaultActionSet(ActionSet):
             if action_id < 0 or action_id > len(self._action_list):
                 logger.error("The wrong action ID %d from the network output", action_id)
                 raise Exception("The wrong action ID. {}".format(action_id))
-            if not self._current_available_actions[action_id]:
+            #if not self._current_available_actions[action_id]:
 
             action = self._action_list[action_id]
             parameter_types = action.arg_types
@@ -198,6 +198,7 @@ class SelectPointAction(AtomAction):
 class SelectRectAction(AtomAction):
     def __init__(self, **kwargs):
         super().__init__(actions.FUNCTIONS.select_point, **kwargs)
+
 
 class SelectArmyAction(AtomAction):
     def __init__(self, **kwargs):
