@@ -162,19 +162,19 @@ class FeatureScreenPlayerRelativeFilter(FeatureScreenFilter):
 class FeatureScreenSelfUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out self units as ones and otherwise zeros"""
     def __init__(self):
-        super().__init__("self_unit", filter_vallue=features.PlayerRelative.SELF)
+        super().__init__("self_unit", filter_value=features.PlayerRelative.SELF)
 
 
 class FeatureScreenEnemyUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out enemy units as ones and otherwise zeros"""
     def __init__(self):
-        super().__init__("enemy_unit", filter_vallue=features.PlayerRelative.ENEMY)
+        super().__init__("enemy_unit", filter_value=features.PlayerRelative.ENEMY)
 
 
 class FeatureScreenNeuralUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out neutral units as ones and otherwise zeros"""
     def __init__(self):
-        super().__init__("neutral_unit", filter_vallue=features.PlayerRelative.NEUTRAL)
+        super().__init__("neutral_unit", filter_value=features.PlayerRelative.NEUTRAL)
 
 
 class FeatureScreenUnitHitPointFilter(FeatureScreenFilter):

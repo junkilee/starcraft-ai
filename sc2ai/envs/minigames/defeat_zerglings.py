@@ -20,4 +20,4 @@ class DefeatZerglingsEnv(SingleAgentSC2Env):
             FeatureScreenNeuralUnitFilter()
         ])
 
-        super().__init__("MoveToBeacon", action_set, observation_set, **kwargs)
+        super().__init__("DefeatZerglings", action_set, observation_set, **kwargs)

@@ -1,8 +1,7 @@
 """A script to train a Ray agent using the :py:mod:`sc2ai` environment.
 """
-import os
-import sys
 import argparse
+from absl import flags
 from sc2ai.rllib import train, rollout, worker, envtest
 
 
@@ -36,6 +35,10 @@ def run():
     else:
         parser.print_help()
 
+
+FLAGS = flags.FLAGS
+flags.DEFINE_string('f', '', 'kernel')
+FLAGS.mark_as_parsed()
 
 if __name__ == '__main__':
     run()

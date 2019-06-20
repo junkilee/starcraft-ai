@@ -6,7 +6,7 @@ from collections import namedtuple
 feature_screen_size = 84
 feature_minimap_size = 64
 
-SC2EnvOptions = namedtuple('SC2EnvOptions', ('render', 'feature_screen_size', 'feature_minimap_size',
+SC2EnvOptions = namedtuple('SC2EnvOptions', ('map', 'render', 'feature_screen_size', 'feature_minimap_size',
                                              'rgb_screen_size', 'rgb_minimap_size', 'action_space',
                                              'use_feature_units', 'use_raw_units', 'disable_fog',
                                              'max_agent_steps', 'game_steps_per_episode', 'max_episodes',
@@ -15,12 +15,13 @@ SC2EnvOptions = namedtuple('SC2EnvOptions', ('render', 'feature_screen_size', 'f
                                              'difficulty', 'profile', 'trace', 'parallel', 'save_replay'))
 
 """ The definition of SC2EnvOptions """
-default_env_options = SC2EnvOptions(render=False,
+default_env_options = SC2EnvOptions(map=None,
+                                    render=False,
                                     feature_screen_size=feature_screen_size,
                                     feature_minimap_size=feature_minimap_size,
                                     rgb_screen_size=None,
                                     rgb_minimap_size=None,
-                                    action_space=sc2_env.ActionSpace.FEATURES,
+                                    action_space="features",
                                     use_feature_units=True,
                                     use_raw_units=True,
                                     disable_fog=True,
@@ -29,9 +30,9 @@ default_env_options = SC2EnvOptions(render=False,
                                     max_episodes=0,
                                     step_mul=80,
                                     agent1_name="TrainedAI",
-                                    agent1_race=sc2_env.Race.terran,
+                                    agent1_race="terran",
                                     agent2_name="DefaultAI",
-                                    agent2_race=sc2_env.Race.terran,
+                                    agent2_race="terran",
                                     difficulty=sc2_env.Difficulty.very_easy,
                                     profile=False,
                                     trace=False,

@@ -3,7 +3,7 @@ from ..actions import *
 from ..observations import *
 
 
-class BuildMarinesEnv(SingleAgentSC2Env):
+class ExpandBaseEnv(SingleAgentSC2Env):
     """A class containing specifications for the MoveToBeacon Minimap
     """
     def __init__(self, **kwargs):
@@ -20,4 +20,4 @@ class BuildMarinesEnv(SingleAgentSC2Env):
             FeatureScreenNeuralUnitFilter()
         ])
 
-        super().__init__("BuildMarines", action_set, observation_set, num_players=1,  **kwargs)
+        super().__init__("ExpandBase", action_set, observation_set, num_players=1, **kwargs)

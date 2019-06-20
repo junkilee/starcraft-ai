@@ -12,8 +12,6 @@ logger = logging.getLogger(__name__)
 env_closer = closer.Closer()
 
 
-
-
 class SingleAgentSC2Env(gym.Env):
     """A gym wrapper for PySC2's Starcraft II environment.
 
@@ -27,10 +25,11 @@ class SingleAgentSC2Env(gym.Env):
 
     _owns_render = True
 
-    def __init__(self, map_name, action_set, observation_set, reward_processor=RewardProcessor(), **kwargs):
+    def __init__(self, map_name, action_set, observation_set, num_players=2, reward_processor=RewardProcessor(), **kwargs):
         super().__init__()
+        self._num_players = num_players
         self._map_name = map_name
-        self._env_options = default_env_options._replace(kwargs)
+        self._env_options = default_env_options._replace(**kwargs)
         self._sc2_env = None
         self._seed = None
         self._observation_spec = None
@@ -44,7 +43,6 @@ class SingleAgentSC2Env(gym.Env):
         self._current_raw_obs = None
         self._current_obs = None
 
-
     def _init_sc2_env(self):
         """
         Initializes the PySC2 environment
@@ -52,8 +50,9 @@ class SingleAgentSC2Env(gym.Env):
         Returns:
 
         """
-        players = (sc2_env.Agent(sc2_env.Race[self._env_options.agent1_race], self._env_options.agent1_name),
-                   sc2_env.Bot(sc2_env.Race[self._env_options.agent2_race], self._env_options.difficulty))
+        players = [sc2_env.Agent(sc2_env.Race[self._env_options.agent1_race], self._env_options.agent1_name)]
+        if self._num_players > 1:
+            players += [sc2_env.Bot(sc2_env.Race[self._env_options.agent2_race], self._env_options.difficulty)]
 
         self._sc2_env = sc2_env.SC2Env(
             map_name=self._map_name,

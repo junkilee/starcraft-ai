@@ -32,4 +32,4 @@ def make_sc2env(**kwargs):
     else:
         cls = MAP_ENV_MAPPINGS[kwargs["map"]]
 
-    return gym.make(cls(**kwargs))
+    return cls(**kwargs)

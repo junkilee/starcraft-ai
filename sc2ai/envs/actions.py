@@ -30,7 +30,7 @@ class ActionSet(ABC):
     def __init__(self, action_list):
         self._action_list = action_list
         self._num_actions = len(action_list)
-        self._current_available_actions = [True] * self.num_actions
+        self._current_available_actions = [True] * self._num_actions
 
     @abstractmethod
     def convert_to_gym_action_spaces(self):
@@ -160,7 +160,7 @@ class AtomAction(Action):
     def __init__(self, function_tuple, **kwargs):
         self.function_tuple = function_tuple
         arg_types = function_tuple.args
-        super().__init__(self, arg_types, **kwargs)
+        super().__init__(arg_types, **kwargs)
 
     @classmethod
     def factory(cls, pysc2_function):
@@ -207,4 +207,14 @@ class SelectArmyAction(AtomAction):
 
 class MoveScreenAction(AtomAction):
     def __init__(self, **kwargs):
-        super().__init__(actions.FUNCTIONS.move_screen, **kwargs)
+        super().__init__(actions.FUNCTIONS.Move_screen, **kwargs)
+
+
+class MoveScreenAction(AtomAction):
+    def __init__(self, **kwargs):
+        super().__init__(actions.FUNCTIONS.Move_screen, **kwargs)
+
+
+class MoveScreenAction(AtomAction):
+    def __init__(self, **kwargs):
+        super().__init__(actions.FUNCTIONS.Move_screen, **kwargs)
