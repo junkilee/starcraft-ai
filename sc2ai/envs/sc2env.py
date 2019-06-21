@@ -143,8 +143,8 @@ class SingleAgentSC2Env(gym.Env):
     def step(self, actions):
         total_reward = 0
         for action in actions:
-            transformed_action = self._action_set.transform_action(action)
-            raw_obs, reward, done, info = self._single_step(self, transformed_action)
+            transformed_action = self._action_set.transform_action(self._current_obs, action)
+            raw_obs, reward, done, info = self._single_step(transformed_action)
             self._current_raw_obs = raw_obs
             total_reward += self._process_reward(reward, raw_obs)
             if done:
