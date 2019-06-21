@@ -214,7 +214,15 @@ class MoveScreenAction(AtomAction):
     def __init__(self, **kwargs):
         super().__init__(actions.FUNCTIONS.Move_screen, **kwargs)
 
-
-class MoveScreenAction(AtomAction):
+class AttackScreenAction(AtomAction):
     def __init__(self, **kwargs):
-        super().__init__(actions.FUNCTIONS.Move_screen, **kwargs)
+        super().__init__(actions.FUNCTIONS.Attack_screen, **kwargs)
+
+class TrainSCVAction(AtomAction):
+    def __init__(self, **kwargs):
+        super().__init__(actions.FUNCTIONS.Train_SCV_quick, **kwargs)
+
+
+class TrainMarineAction(AtomAction):
+    def __init__(self, **kwargs):
+        super().__init__(actions.FUNCTIONS.Train_Marine_quick, **kwargs)
