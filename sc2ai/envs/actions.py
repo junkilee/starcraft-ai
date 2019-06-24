@@ -66,10 +66,10 @@ class DefaultActionSet(ActionSet):
     """Store a list of default PySC2 actions in this set.
     Uses a shared parameter space called _parameter_registry."""
 
-    def __init__(self, actionlist, reorder_action_id = False,
-                 feature_screen_size = game_info.feature_screen_size,
-                 feature_minimap_size = game_info.feature_minimap_size,):
-        super().__init__(actionlist)
+    def __init__(self, action_list, reorder_action_id = False,
+                 feature_screen_size=game_info.feature_screen_size,
+                 feature_minimap_size=game_info.feature_minimap_size,):
+        super().__init__(action_list)
         self._argument_types_registry = self.register_argument_types()
         self._reorder_action_id = reorder_action_id
         self._current_num_actions = self._num_actions
@@ -84,7 +84,7 @@ class DefaultActionSet(ActionSet):
         for action in self._action_list:
             parameters = action.arg_types
             for parameter in parameters:
-                if not parameter in registry:
+                if not (parameter in registry):
                     registry[parameter] = count
                     count += 1
         return registry
@@ -131,6 +131,7 @@ class DefaultActionSet(ActionSet):
                 retrieve_parameter_size_vector(arg_type,
                                                self._feature_screen_size,
                                                self._feature_minimap_size)
+        # print(vector)
         return MultiDiscrete(vector)
 
 
@@ -215,9 +216,11 @@ class MoveScreenAction(AtomAction):
     def __init__(self, **kwargs):
         super().__init__(actions.FUNCTIONS.Move_screen, **kwargs)
 
+
 class AttackScreenAction(AtomAction):
     def __init__(self, **kwargs):
         super().__init__(actions.FUNCTIONS.Attack_screen, **kwargs)
+
 
 class TrainSCVAction(AtomAction):
     def __init__(self, **kwargs):

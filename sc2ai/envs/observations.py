@@ -2,6 +2,7 @@
    to processed numpy arrays
 """
 from pysc2.lib import features
+from pysc2.lib.named_array import NamedNumpyArray
 from abc import ABC, abstractmethod
 import numpy as np
 from sc2ai.envs import game_info
@@ -9,6 +10,7 @@ import logging
 from gym.spaces.dict_space import Dict
 from gym.spaces.box import Box
 from gym.spaces.tuple_space import Tuple
+
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +58,14 @@ class CategorizedObservationSet(ObservationSet):
             for category in self._categories:
                 output_dict[category] = []
             for f in self._filters_list:
-                output_dict[f.category] += (f(observation),)
+                filtered = f(observation)
+                if isinstance(filtered, NamedNumpyArray):
+                    filtered = filtered.view(np.ndarray)
+                output_dict[f.category] += (filtered,)
+            # for category in self._categories:
+            #     print(category)
+            #     for obs in output_dict[category]:
+            #         print(obs.shape)
             for category in self._categories:
                 if len(output_dict[category]) > 1:
                     output_dict[category] = np.stack(output_dict[category])
@@ -67,6 +76,7 @@ class CategorizedObservationSet(ObservationSet):
                 output_dict[category] = {}
             for f in self._filters_list:
                 output_dict[f.category][f.name] = f(observation)
+        # print(output_dict['feature_screen'].shape)
         return output_dict
 
     def convert_to_gym_observation_spaces(self):
@@ -75,7 +85,7 @@ class CategorizedObservationSet(ObservationSet):
             for category in self._categories:
                 output_dict[category] = []
             for f in self._filters_list:
-                output_dict[f.cateogry] += (f.get_space(),)
+                output_dict[f.category] += (f.get_space(),)
             for category in self._categories:
                 if len(output_dict[category]) > 1:
                     output_dict[category] = np.stack(output_dict[category])
@@ -171,7 +181,7 @@ class FeatureScreenEnemyUnitFilter(FeatureScreenPlayerRelativeFilter):
         super().__init__("enemy_unit", filter_value=features.PlayerRelative.ENEMY)
 
 
-class FeatureScreenNeuralUnitFilter(FeatureScreenPlayerRelativeFilter):
+class FeatureScreenNeutralUnitFilter(FeatureScreenPlayerRelativeFilter):
     """Filters out neutral units as ones and otherwise zeros"""
     def __init__(self):
         super().__init__("neutral_unit", filter_value=features.PlayerRelative.NEUTRAL)
