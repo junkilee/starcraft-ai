@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from pysc2.lib import actions
 from sc2ai.envs import game_info
 from gym.spaces.multi_discrete import MultiDiscrete
+import numpy as np
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ def retrieve_parameter_size_vector(arg_type, feature_screen_size, feature_minima
         else:
             raise NotImplementedError
     else:
-        return arg_type.sizes
+        return np.prod(arg_type.sizes)
 
 
 class ActionSet(ABC):
