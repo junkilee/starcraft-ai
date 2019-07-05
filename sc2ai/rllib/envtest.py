@@ -50,7 +50,6 @@ def run(args, parser):
 
 def envtest(mapname, num_steps, out=None, no_render=True):
     env = sc2ai_env.make_sc2env(map=mapname)
-    action_gym_space = env.action_gym_space
 
     steps = 0
     while steps < (num_steps or steps + 1):
@@ -61,7 +60,7 @@ def envtest(mapname, num_steps, out=None, no_render=True):
         reward_total = 0.0
         while not done and steps < (num_steps or steps + 1):
             # randomly sample an action
-            actions = [action_gym_space.sample()]
+            actions = [env.sample_action()]
             next_state, reward, done, _ = env.step(actions)
             reward_total += reward
             if not no_render:
@@ -71,10 +70,10 @@ def envtest(mapname, num_steps, out=None, no_render=True):
             steps += 1
             state = next_state
         if out is not None:
-            rollouts.append(rollout)
+            rollout.append(rollout)
         print("Episode reward", reward_total)
     if out is not None:
-        pickle.dump(rollouts, open(out, "wb"))
+        pickle.dump(rollout, open(out, "wb"))
 
 
 if __name__ == "__main__":

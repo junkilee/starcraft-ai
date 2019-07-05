@@ -20,6 +20,18 @@ def retrieve_parameter_size_vector(arg_type, feature_screen_size, feature_minima
         return np.prod(arg_type.sizes)
 
 
+def translate_parameter_value(arg_type, value, feature_screen_size, feature_minimap_size):
+    if arg_type.sizes == (0, 0):
+        if arg_type is actions.TYPES.screen:
+            return [value // feature_screen_size, value % feature_screen_size]
+        elif arg_type is actions.TYPES.minimap:
+            return [value // feature_minimap_size, value % feature_minimap_size]
+        else:
+            raise NotImplementedError
+    else:
+        return [value]
+
+
 class ActionSet(ABC):
     """An abstraction class for Action Sets.
     An Action Set handles a set of actions assigned to a specific environment and
@@ -31,7 +43,7 @@ class ActionSet(ABC):
     def __init__(self, action_list):
         self._action_list = action_list
         self._num_actions = len(action_list)
-        self._current_available_actions = [True] * self._num_actions
+        self._current_available_actions = [False] * self._num_actions
 
     @abstractmethod
     def convert_to_gym_action_spaces(self):
@@ -40,6 +52,11 @@ class ActionSet(ABC):
     @abstractmethod
     def transform_action(self, observation, action_values):
         pass
+
+    def is_action_available(self, action_index):
+        if action_index < 0 or action_index >= self._num_actions:
+            raise Exception("action index is out of range.")
+        return self._current_available_actions[action_index]
 
     def update_available_actions(self, available_actions):
         """Update the table of available actions
@@ -58,8 +75,7 @@ class ActionSet(ABC):
                 if not id in available_actions:
                     check = True
                     break
-            if check:
-                self._current_available_actions[i] = False
+            self._current_available_actions[i] = not check
 
 
 class DefaultActionSet(ActionSet):
@@ -68,7 +84,7 @@ class DefaultActionSet(ActionSet):
 
     def __init__(self, action_list, reorder_action_id = False,
                  feature_screen_size=game_info.feature_screen_size,
-                 feature_minimap_size=game_info.feature_minimap_size,):
+                 feature_minimap_size=game_info.feature_minimap_size):
         super().__init__(action_list)
         self._argument_types_registry = self.register_argument_types()
         self._reorder_action_id = reorder_action_id
@@ -140,8 +156,10 @@ class Action(ABC):
     def __init__(self, arg_types, **kwargs):
         self._default_arguments = kwargs
         self._arg_types = arg_types
-        self._feature_screen_size = kwargs['feature_screen_size'] if 'feature_screen_size' in kwargs else None
-        self._feature_minimap_size = kwargs['feature_minimap_size'] if 'feature_minimap_size' in kwargs else None
+        self._feature_screen_size = \
+            kwargs['feature_screen_size'] if 'feature_screen_size' in kwargs else game_info.feature_screen_size
+        self._feature_minimap_size = \
+            kwargs['feature_minimap_size'] if 'feature_minimap_size' in kwargs else game_info.feature_minimap_size
         self._defaults = kwargs
 
     @abstractmethod
@@ -179,11 +197,15 @@ class AtomAction(Action):
 
     def transform_action(self, observation, action_values):
         arg_values = []
-        for arg_type in self._arg_types:
+        print(action_values)
+        print(self.__class__)
+        print(self._arg_types)
+        for i, arg_type in enumerate(self._arg_types):
             if arg_type.name in self._defaults:
                 arg_values += [self._defaults[arg_type.name]]
             else:
-                arg_values += [action_values[self._arg_types[arg_type]]]
+                arg_values += [translate_parameter_value(arg_type, action_values[i], self._feature_screen_size, self._feature_minimap_size)]
+        print(arg_values)
         return self.function_tuple(*arg_values)
 
 

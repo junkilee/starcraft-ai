@@ -140,13 +140,34 @@ class SingleAgentSC2Env(gym.Env):
         """
         self._seed = seed
 
+    def sample_action(self):
+        while True:
+            sampled_action = self._action_gym_space.sample()
+            if self._action_set.is_action_available(sampled_action[0]):
+                break
+        return sampled_action
+
     def step(self, actions):
+        """
+
+        Args:
+            actions:
+
+        Returns:
+
+        """
         total_reward = 0
+        # Features double-step action cascading
         for action in actions:
-            transformed_action = self._action_set.transform_action(self._current_obs, action)
-            raw_obs, reward, done, info = self._single_step(transformed_action)
-            self._current_raw_obs = raw_obs
-            total_reward += self._process_reward(reward, raw_obs)
+            transformed_actions = self._action_set.transform_action(self._current_obs, action)
+            print(transformed_actions)
+            for transformed_action in transformed_actions:
+                raw_obs, reward, done, info = self._single_step(transformed_action)
+                self._current_raw_obs = raw_obs
+                print(raw_obs.available_actions)
+                total_reward += self._process_reward(reward, raw_obs)
+                if done:
+                    break
             if done:
                 break
         self._action_set.update_available_actions(raw_obs.available_actions)
