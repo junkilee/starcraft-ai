@@ -15,36 +15,36 @@ from gym.spaces.tuple_space import Tuple
 logger = logging.getLogger(__name__)
 
 
-class ObservationSet(ABC):
-    def __init__(self, filters_list):
-        self._filters_list = filters_list
+class ObservationSet:
+    def __init__(self, categories_list):
+        self._categories_list = categories_list
 
-    @abstractmethod
     def transform_observation(self, observation):
-        """transform into a gym consumable observation instance from the pysc2 observation output.
 
-        Args:
-            observation: a named dict containing named numpy array coming from pysc2.
-
-        Returns:
-            a dictionary containing observation in numpy array format.
-        """
-        pass
-
-    @abstractmethod
     def convert_to_gym_observation_spaces(self):
-        """Generate a set of gym observation spaces from the given set of Observation Filters.
+        output_dict = {}
+        if self._use_stacked:
+            for category in self._categories:
+                output_dict[category] = []
+            for f in self._filters_list:
+                output_dict[f.category] += (f.get_space(),)
+            for category in self._categories:
+                if len(output_dict[category]) > 1:
+                    output_dict[category] = np.stack(output_dict[category])
+                else:
+                    output_dict[category] = output_dict[category][0]
+        else:
+            for category in self._categories:
+                output_dict[category] = {}
+            for f in self._filters_list:
+                output_dict[f.category][f.name] = f.get_space()
+        return output_dict
 
-        Returns:
-            a gym Space representing the given set of the Observation Filters.
-        """
-        pass
 
-
-class CategorizedObservationSet(ObservationSet):
+class Category(ABC):
     """An observation set which outputs a Dict gym space.
     """
-    def __init__(self, filters_list, use_stacked = True):
+    def __init__(self, name, filters_list, use_stacked = True):
         super().__init__(filters_list)
         self._categories = []
         self._use_stacked = use_stacked
@@ -52,6 +52,7 @@ class CategorizedObservationSet(ObservationSet):
             if f.category not in self._categories:
                 self._categories += (f.category,)
 
+    @abstractmethod
     def transform_observation(self, observation):
         output_dict = {}
         if self._use_stacked:
@@ -79,24 +80,9 @@ class CategorizedObservationSet(ObservationSet):
         # print(output_dict['feature_screen'].shape)
         return output_dict
 
+    @abstractmethod
     def convert_to_gym_observation_spaces(self):
-        output_dict = {}
-        if self._use_stacked:
-            for category in self._categories:
-                output_dict[category] = []
-            for f in self._filters_list:
-                output_dict[f.category] += (f.get_space(),)
-            for category in self._categories:
-                if len(output_dict[category]) > 1:
-                    output_dict[category] = np.stack(output_dict[category])
-                else:
-                    output_dict[category] = output_dict[category][0]
-        else:
-            for category in self._categories:
-                output_dict[category] = {}
-            for f in self._filters_list:
-                output_dict[f.category][f.name] = f.get_space()
-        return output_dict
+        pass
 
 
 class ObservationFilter(ABC):
