@@ -16,73 +16,87 @@ logger = logging.getLogger(__name__)
 
 
 class ObservationSet:
+    """Default Observation Set containing different categories of filters.
+    """
     def __init__(self, categories_list):
-        self._categories_list = categories_list
+        self._categories = categories_list
 
     def transform_observation(self, observation):
+        output_dict = {}
+        for category in self._categories:
+            output_dict[category.name] = category.transform_observation(observation)
+        return output_dict
 
     def convert_to_gym_observation_spaces(self):
         output_dict = {}
-        if self._use_stacked:
-            for category in self._categories:
-                output_dict[category] = []
-            for f in self._filters_list:
-                output_dict[f.category] += (f.get_space(),)
-            for category in self._categories:
-                if len(output_dict[category]) > 1:
-                    output_dict[category] = np.stack(output_dict[category])
-                else:
-                    output_dict[category] = output_dict[category][0]
-        else:
-            for category in self._categories:
-                output_dict[category] = {}
-            for f in self._filters_list:
-                output_dict[f.category][f.name] = f.get_space()
-        return output_dict
+        for category in self._categories:
+            output_dict[category] = category.convert_to_gym_observation_spaces()
+        return Dict(output_dict)
 
 
 class Category(ABC):
     """An observation set which outputs a Dict gym space.
     """
-    def __init__(self, name, filters_list, use_stacked = True):
-        super().__init__(filters_list)
-        self._categories = []
-        self._use_stacked = use_stacked
-        for f in self._filters_list:
-            if f.category not in self._categories:
-                self._categories += (f.category,)
+    def __init__(self, name, filters_list):
+        self._name = name
+        self._filters = filters_list
+
+    @property
+    def name(self):
+        return self._name
 
     @abstractmethod
     def transform_observation(self, observation):
-        output_dict = {}
-        if self._use_stacked:
-            for category in self._categories:
-                output_dict[category] = []
-            for f in self._filters_list:
-                filtered = f(observation)
-                if isinstance(filtered, NamedNumpyArray):
-                    filtered = filtered.view(np.ndarray)
-                output_dict[f.category] += (filtered,)
-            # for category in self._categories:
-            #     print(category)
-            #     for obs in output_dict[category]:
-            #         print(obs.shape)
-            for category in self._categories:
-                if len(output_dict[category]) > 1:
-                    output_dict[category] = np.stack(output_dict[category])
-                else:
-                    output_dict[category] = output_dict[category][0]
-        else:
-            for category in self._categories:
-                output_dict[category] = {}
-            for f in self._filters_list:
-                output_dict[f.category][f.name] = f(observation)
-        # print(output_dict['feature_screen'].shape)
-        return output_dict
+        pass
 
     @abstractmethod
     def convert_to_gym_observation_spaces(self):
         pass
+
+
+class MapCategory(Category):
+    """A category for handling filters which handle 2D maps.
+    It is assumed that filters in the same category share the same 2D dimension.
+    """
+    def __init__(self, name, filters_list, use_stacked=True):
+        super().__init__(name, filters_list)
+        self._use_stacked = use_stacked
+
+    @abstractmethod
+    def transform_observation(self, observation):
+        output = None
+        if self._use_stacked:
+            for f in self._filters_list:
+                filtered = f(observation)
+                if isinstance(filtered, NamedNumpyArray):
+                    filtered = filtered.view(np.ndarray)
+                output += (filtered,)
+            if len(output) > 1:
+                output = np.stack(output)
+            else:
+                output = output[0]
+        else:
+            output = {}
+            for f in self._filters_list:
+                output[f.name] = f(observation)
+        return output
+
+    @abstractmethod
+    def convert_to_gym_observation_spaces(self):
+        output = None
+        if self._use_stacked:
+            for f in self._filters_list:
+                output += (f.get_space(),)
+            if len(output) > 1:
+                output = np.stack(output)
+            else:
+                output = output[0]
+            return Box(low=0.0, high=0.0, shape=output, dtype=np.float32)
+        else:
+            output = {}
+            for f in self._filters_list:
+                output[f.name] = Box(low=0.0, high=0.0, shape=f.get_space(), dtype=np.float32)
+            return Dict(output)
 
 
 class ObservationFilter(ABC):

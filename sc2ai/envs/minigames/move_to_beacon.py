@@ -15,9 +15,10 @@ class MoveToBeaconEnv(SingleAgentSC2Env):
             MoveScreenAction(queued="now"),
         ])
 
-        observation_set = CategorizedObservationSet([
-            FeatureScreenSelfUnitFilter(),
-            FeatureScreenNeutralUnitFilter()
+        observation_set = ObservationSet([
+            MapCategory("feature_screen", [
+                FeatureScreenSelfUnitFilter(),
+                FeatureScreenNeutralUnitFilter()])
         ])
 
         super().__init__("MoveToBeacon", action_set, observation_set, num_players=1, **kwargs)
