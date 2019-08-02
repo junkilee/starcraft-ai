@@ -9,6 +9,8 @@ import pickle
 
 import ray
 import sc2ai.envs as sc2ai_env
+from absl import flags
+
 
 EXAMPLE_USAGE = """
 Example Usage via run.py:
@@ -77,6 +79,7 @@ def envtest(mapname, num_steps, out=None, no_render=True):
 
 
 if __name__ == "__main__":
+    flags.FLAGS.mark_as_parsed()
     parser = create_parser()
     args = parser.parse_args()
     run(args, parser)

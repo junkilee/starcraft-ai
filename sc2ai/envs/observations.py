@@ -62,11 +62,10 @@ class MapCategory(Category):
         super().__init__(name, filters_list)
         self._use_stacked = use_stacked
 
-    @abstractmethod
     def transform_observation(self, observation):
         output = None
         if self._use_stacked:
-            for f in self._filters_list:
+            for f in self._filters:
                 filtered = f(observation)
                 if isinstance(filtered, NamedNumpyArray):
                     filtered = filtered.view(np.ndarray)
@@ -77,25 +76,25 @@ class MapCategory(Category):
                 output = output[0]
         else:
             output = {}
-            for f in self._filters_list:
+            for f in self._filters:
                 output[f.name] = f(observation)
         return output
 
-    @abstractmethod
     def convert_to_gym_observation_spaces(self):
-        output = None
         if self._use_stacked:
-            for f in self._filters_list:
+            output = []
+            for f in self._filters:
                 output += (f.get_space(),)
             if len(output) > 1:
                 output = np.stack(output)
             else:
                 output = output[0]
-            return Box(low=0.0, high=0.0, shape=output, dtype=np.float32)
+            print(output)
+            return Box(low=0.0, high=1.0, shape=output, dtype=np.float32)
         else:
             output = {}
-            for f in self._filters_list:
-                output[f.name] = Box(low=0.0, high=0.0, shape=f.get_space(), dtype=np.float32)
+            for f in self._filters:
+                output[f.name] = Box(low=0.0, high=1.0, shape=f.get_space(), dtype=np.float32)
             return Dict(output)
 
 
@@ -136,8 +135,9 @@ class FeatureScreenFilter(ObservationFilter):
     def get_space(self):
         return np.array((self._feature_screen_size, self._feature_screen_size))
 
+    @abstractmethod
     def __call__(self, observation):
-        raise NotImplementedError()
+        pass
 
 
 class FeatureMinimapFilter(ObservationFilter):
@@ -151,8 +151,9 @@ class FeatureMinimapFilter(ObservationFilter):
     def get_space(self):
         return np.array((self.feature_minimap_size, self.feature_minimap_size))
 
+    @abstractmethod
     def __call__(self, observation):
-        raise NotImplementedError()
+        pass
 
 
 class FeatureScreenPlayerRelativeFilter(FeatureScreenFilter):
