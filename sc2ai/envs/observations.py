@@ -61,10 +61,19 @@ class MapCategory(Category):
     def __init__(self, name, filters_list, use_stacked=True):
         super().__init__(name, filters_list)
         self._use_stacked = use_stacked
+        # Check if all 2D maps have same dimensions
+        if self._use_stacked:
+            fixed_space = None
+            for _filter in self._filters:
+                space = _filter.get_space()
+                if fixed_space is None:
+                    fixed_space = space
+                elif not np.array_equal(fixed_space, space):
+                    raise Exception("Filters do not share same dimension.")
 
     def transform_observation(self, observation):
-        output = None
         if self._use_stacked:
+            output = []
             for f in self._filters:
                 filtered = f(observation)
                 if isinstance(filtered, NamedNumpyArray):
@@ -82,15 +91,11 @@ class MapCategory(Category):
 
     def convert_to_gym_observation_spaces(self):
         if self._use_stacked:
-            output = []
-            for f in self._filters:
-                output += (f.get_space(),)
-            if len(output) > 1:
-                output = np.stack(output)
-            else:
-                output = output[0]
-            print(output)
-            return Box(low=0.0, high=1.0, shape=output, dtype=np.float32)
+            shape = self._filters[0].get_space()
+            if len(self._filters) > 1:
+                dimension = (len(self._filters),) + shape
+            print(shape)
+            return Box(low=0.0, high=1.0, shape=shape, dtype=np.float32)
         else:
             output = {}
             for f in self._filters:
