@@ -40,6 +40,8 @@ def create_parser(parser_creator=None):
         const=True,
         help="Surpress rendering of the environment.")
     parser.add_argument(
+        "--skips", default=10, help="Number of action skips before a random action.")
+    parser.add_argument(
         "--steps", default=10000, help="Number of steps for testing the environment.")
     return parser
 
@@ -47,11 +49,11 @@ def create_parser(parser_creator=None):
 def run(args, parser):
     ray.init()
     num_steps = int(args.steps)
-    envtest(args.mapname, num_steps, args.out, args.no_render)
+    envtest(args.mapname, num_steps, args.out, args.no_render, int(args.skips))
 
 
-def envtest(mapname, num_steps, out=None, no_render=True):
-    env = sc2ai_env.make_sc2env(map=mapname)
+def envtest(mapname, num_steps, out=None, no_render=True, num_skips=0):
+    env = sc2ai_env.make_sc2env(map=mapname, render=not no_render)
 
     steps = 0
     while steps < (num_steps or steps + 1):
