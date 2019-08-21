@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 env_closer = closer.Closer()
 
 
+def tensor_analyzer(tensor):
+    print(tensor.shape)
+    print(np.unique(tensor))
+
+
 class SingleAgentSC2Env(gym.Env):
     """A gym wrapper for PySC2's Starcraft II environment.
 
@@ -163,6 +168,11 @@ class SingleAgentSC2Env(gym.Env):
             print(transformed_actions)
             for transformed_action in transformed_actions:
                 raw_obs, reward, done, info = self._single_step(transformed_action)
+                print("main keys: ", raw_obs.keys())
+                print("feature screen keys: ", raw_obs.feature_screen._index_names)
+                print("feature minimap keys: ", raw_obs.feature_minimap._index_names)
+                print("")
+
                 self._current_raw_obs = raw_obs
                 print(raw_obs.available_actions)
                 total_reward += self._process_reward(reward, raw_obs)

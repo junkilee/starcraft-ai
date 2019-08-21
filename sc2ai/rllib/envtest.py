@@ -10,6 +10,7 @@ import pickle
 import ray
 import sc2ai.envs as sc2ai_env
 from absl import flags
+import numpy as np
 
 
 EXAMPLE_USAGE = """
