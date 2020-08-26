@@ -11,10 +11,12 @@ register(
 
 
 MAP_ENV_MAPPINGS = {
-    "DefeatZerglings": minigames.DefeatZerglingsEnv,
+    "DefeatZerglingsAndBanelings": minigames.DefeatZerglingsAndBanelingsEnv,
+    "DefeatRoaches": minigames.DefeatRoachesEnv,
     "CollectMineralAndGas": minigames.CollectMineralAndGasEnv,
     "MoveToBeacon": minigames.MoveToBeaconEnv,
-    "BuildMarines": minigames.BuildMarinesEnv
+    "BuildMarines": minigames.BuildMarinesEnv,
+    "FleeRoachesv4_training": minigames.FleeRoachesEnv
 }
 
 

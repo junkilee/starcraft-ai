@@ -7,9 +7,9 @@ from __future__ import print_function
 import argparse
 import pickle
 
-import ray
 import sc2ai.envs as sc2ai_env
 from absl import flags
+from sc2ai.spinup.utils.mpi_pytorch import num_procs, proc_id
 import numpy as np
 
 
@@ -35,11 +35,17 @@ def create_parser(parser_creator=None):
     #    "out", type=str, help="Name of the minimap.")
     parser.add_argument("--out", default=None, help="Output filename.")
     parser.add_argument(
-        "--no-render",
+            "--no-render",
         default=False,
         action="store_const",
         const=True,
         help="Surpress rendering of the environment.")
+    parser.add_argument(
+        "--realtime",
+        default=False,
+        action="store_const",
+        const=True,
+        help="Determine whether the game will run in realtime.")
     parser.add_argument(
         "--skips", default=10, help="Number of action skips before a random action.")
     parser.add_argument(
@@ -48,35 +54,45 @@ def create_parser(parser_creator=None):
 
 
 def run(args, parser):
-    ray.init()
     num_steps = int(args.steps)
-    envtest(args.mapname, num_steps, args.out, args.no_render, int(args.skips))
+    envtest(args.mapname, num_steps, args.out, args.no_render, args.realtime, int(args.skips))
 
 
-def envtest(mapname, num_steps, out=None, no_render=True, num_skips=0):
-    env = sc2ai_env.make_sc2env(map=mapname, render=not no_render)
+def envtest(mapname, num_steps, out=None, no_render=True, realtime=False, num_skips=0):
+    env = sc2ai_env.make_sc2env(map=mapname, render=not no_render, realtime=realtime)
 
-    steps = 0
-    while steps < (num_steps or steps + 1):
+    env._action_set.report()
+    print(env.action_gym_space)
+    print(env.action_set.get_action_spec())
+    print(env.action_gym_space.nvec)
+    print(env.observation_gym_space)
+    print("mpi proc : {}/{}".format(proc_id(), num_procs()))
+    max_steps_per_episode = 10000
+    total_steps = 0
+    while total_steps < (num_steps or total_steps + 1):
         if out is not None:
             rollout = []
         state = env.reset()
         done = False
         reward_total = 0.0
-        while not done and steps < (num_steps or steps + 1):
+        steps = 0
+        while not done and steps < max_steps_per_episode:
             # randomly sample an action
             actions = [env.sample_action()]
             next_state, reward, done, _ = env.step(actions)
+            print("=>", actions, steps, reward, done)
+            print(next_state['feature_screen'].shape)
             reward_total += reward
             if not no_render:
                 env.render()
             if out is not None:
                 rollout.append([state, actions, next_state, reward, done])
             steps += 1
+            total_steps += 1
             state = next_state
         if out is not None:
             rollout.append(rollout)
-        print("Episode reward", reward_total)
+        print("{} steps and episode reward {}".format(steps, reward_total))
     if out is not None:
         pickle.dump(rollout, open(out, "wb"))
 

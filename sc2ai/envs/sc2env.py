@@ -73,7 +73,8 @@ class SingleAgentSC2Env(gym.Env):
             step_mul=self._env_options.step_mul,
             game_steps_per_episode=self._env_options.game_steps_per_episode,
             disable_fog=self._env_options.disable_fog,
-            visualize=self._env_options.render)
+            visualize=self._env_options.render,
+            realtime=self._env_options.realtime)
         self._observation_spec = self._sc2_env.observation_spec()
         self._action_gym_space = self._action_set.convert_to_gym_action_spaces()
         self._observation_gym_space = self._observation_set.convert_to_gym_observation_spaces()
@@ -113,6 +114,12 @@ class SingleAgentSC2Env(gym.Env):
         if self._sc2_env is None:
             self._init_sc2_env()
         return self._observation_spec
+
+    @property
+    def action_set(self):
+        if self._sc2_env is None:
+            self._init_sc2_env()
+        return self._action_set
 
     @property
     def action_gym_space(self):
@@ -165,23 +172,28 @@ class SingleAgentSC2Env(gym.Env):
         # Features double-step action cascading
         for action in actions:
             transformed_actions = self._action_set.transform_action(self._current_obs, action)
-            print(transformed_actions)
+            #print(transformed_actions)
             for transformed_action in transformed_actions:
                 raw_obs, reward, done, info = self._single_step(transformed_action)
-                print("main keys: ", raw_obs.keys())
-                print("feature screen keys: ", raw_obs.feature_screen._index_names)
-                print("feature minimap keys: ", raw_obs.feature_minimap._index_names)
-                print("")
+                #print(raw_obs.player)
+                #print("main keys: ", raw_obs.keys())
+                #print("feature screen keys: ", raw_obs.feature_screen._index_names)
+                #print("feature minimap keys: ", raw_obs.feature_minimap._index_names)
+                #print("")
 
                 self._current_raw_obs = raw_obs
-                print(raw_obs.available_actions)
+                #print(raw_obs.available_actions)
                 total_reward += self._process_reward(reward, raw_obs)
                 if done:
                     break
             if done:
                 break
-        self._action_set.update_available_actions(raw_obs.available_actions)
-        obs = self._observation_set.transform_observation(raw_obs)
+
+        #print(self._current_raw_obs is None)
+        #print(type(self._current_raw_obs.available_actions))
+        #print(self._current_raw_obs.available_actions)
+        self._action_set.update_available_actions(self._current_raw_obs.available_actions)
+        obs = self._observation_set.transform_observation(self._current_raw_obs)
         self._current_obs = obs
         return obs, total_reward, done, info
     

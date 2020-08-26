@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import numpy as np
+from torch.tensor import Tensor
 
 
 def mpi_fork(n, bind_to_core=False):
@@ -52,6 +53,8 @@ def broadcast(x, root=0):
 
 
 def mpi_op(x, op):
+    if isinstance(x, Tensor) and x.is_cuda:
+        x = x.cpu()
     x, scalar = ([x], True) if np.isscalar(x) else (x, False)
     x = np.asarray(x, dtype=np.float32)
     buff = np.zeros_like(x, dtype=np.float32)
@@ -59,7 +62,7 @@ def mpi_op(x, op):
     return buff[0] if scalar else buff
 
 
-def mpi_sum(x)
+def mpi_sum(x):
     return mpi_op(x, MPI.SUM)
 
 
@@ -68,6 +71,8 @@ def mpi_avg(x):
 
 
 def mpi_statistics_scalar(x, with_min_and_max=False):
+    if isinstance(x, Tensor) and x.is_cuda:
+        x = x.cpu()
     x = np.array(x, dtype=np.float32)
     global_sum, global_n = mpi_sum([np.sum(x), len(x)])
     mean = global_sum / global_n

@@ -1,18 +1,21 @@
+import sys
 import numpy as np
 import torch
+from torch import Tensor
 from torch.optim import Adam
 import gym
 import time
 import sc2ai.spinup.algorithms.ppo.core as core
+import sc2ai.spinup.algorithms.ppo.sc2_nets as sc2_nets
 from sc2ai.spinup.utils.logx import EpochLogger
 from sc2ai.spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from sc2ai.spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 
 
 class PPOBuffer:
-    def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95):
+    def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95, device=torch.device('cpu')):
         self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
+        self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
         self.adv_buf = np.zeros(size, dtype=np.float32)
         self.rew_buf = np.zeros(size, dtype=np.float32)
         self.ret_buf = np.zeros(size, dtype=np.float32)
@@ -20,6 +23,7 @@ class PPOBuffer:
         self.logp_buf = np.zeros(size, dtype=np.float32)
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
+        self.device = device
 
     def store(self, obs, act, rew, val, logp):
         assert self.ptr < self.max_size
@@ -48,26 +52,32 @@ class PPOBuffer:
         adv_mean, adv_std = mpi_statistics_scalar(self.adv_buf)
         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
         data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf, adv=self.adv_buf, logp=self.logp_buf)
-        return {k: torch.as_tensor(v, dtype=np.float32) for k, v in data.items()}
+        return {k: torch.as_tensor(v, device=self.device, dtype=torch.float32) for k, v in data.items()}
 
 
-def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, steps_per_epoch=4000, epochs=50,
-        gamma=0.99, clip_ratio=0.2, pi_lr=3e-4, vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97,
-        max_ep_len=1000, target_kl=0.01, logger_kwargs=dict(), save_freq=10):
+def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), seed=0, steps_per_epoch=10000,
+        epochs=100, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4, vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97,
+        max_ep_len=1000, target_kl=0.03, logger_kwargs=dict(), save_freq=5, device=torch.device("cpu")):
     setup_pytorch_for_mpi()
+
+    print("device - ", device)
 
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
 
     seed += 10000 * proc_id()
     torch.manual_seed(seed)
-    np.random_seed(seed)
+    np.random.seed(seed)
 
     env = env_fn()
-    obs_dim = env.observation_space.shape
-    act_dim = env.action_space.shape
+    # Later change this ---- This depends on the environment and the network structure
+    obs_space = env.observation_gym_space
+    obs_dim = obs_space['feature_screen'].shape
+    act_dim = env.action_gym_space.nvec.shape
+    # ----------------------
+    print("obs_dim, act_dim = ", obs_dim, act_dim)
 
-    ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
+    ac = actor_critic(env.observation_gym_space, action_spec=env.action_set.get_action_spec(), device=device, **ac_kwargs)
 
     sync_params(ac)
 
@@ -75,20 +85,20 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
     logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n' % var_counts)
 
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
-    buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
+    buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam, device)
 
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
 
-        pi, logp = ac.pi(obs, act)
+        pis, logp = ac.pi(obs, act)
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
         approx_kl = (logp_old - logp).mean().item()
-        ent = pi.entropy().mean().item()
+        ent = pis[0].entropy().mean().item()
         clipped = ratio.gt(1 + clip_ratio) | ratio.lt(1 - clip_ratio)
-        clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
+        clipfrac = torch.as_tensor(clipped, dtype=torch.float32, device=device).mean().item()
         pi_info = dict(kl=approx_kl, ent=ent, cf=clipfrac)
 
         return loss_pi, pi_info
@@ -110,6 +120,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
         v_l_old = compute_loss_v(data).item()
 
         for i in range(train_pi_iters):
+            print("training_pi...")
+            sys.stdout.flush()
             pi_optimizer.zero_grad()
             loss_pi, pi_info = compute_loss_pi(data)
             kl = mpi_avg(pi_info['kl'])
@@ -123,6 +135,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
         logger.store(StopIter=i)
 
         for i in range(train_v_iters):
+            print("training_v...")
+            sys.stdout.flush()
             vf_optimizer.zero_grad()
             loss_v = compute_loss_v(data)
             loss_v.backward()
@@ -138,13 +152,19 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
 
     for epoch in range(epochs):
         for t in range(local_steps_per_epoch):
-            a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
+            o = o['feature_screen']
+            a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32).to(device).unsqueeze(0))
+
+            #print("a v logp -- ", a, v, logp)
+            print(".", end='')
+            sys.stdout.flush()
 
             next_o, r, d, _ = env.step(a)
             ep_ret += r
             ep_len += 1
 
             buf.store(o, a, r, v, logp)
+            logger.store(VVals=v)
 
             o = next_o
 
@@ -153,10 +173,12 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
             epoch_ended = t == local_steps_per_epoch - 1
 
             if terminal or epoch_ended:
+                print("episode ended {}".format(t))
                 if epoch_ended and not terminal:
                     print('Warning: trajectory cut off by epoch at %d steps.' % ep_len, flush=True)
                 if timeout or epoch_ended:
-                    _, v, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
+                    o = o['feature_screen']
+                    _, v, _ = ac.step(torch.as_tensor(o, dtype=torch.float32).to(device).unsqueeze(0))
                 else:
                     v = 0
                 buf.finish_path(v)
@@ -167,23 +189,27 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
         if (epoch % save_freq == 0) or (epoch == epochs - 1):
             logger.save_state({'env': env}, None)
 
+        print("update started....")
+        sys.stdout.flush()
         update()
+        print("update ended....")
+        sys.stdout.flush()
 
         logger.log_tabular('Epoch', epoch)
         logger.log_tabular('EpRet', with_min_and_max=True)
         logger.log_tabular('EpLen', average_only=True)
-    logger.log_tabular('VVals', with_min_and_max=True)
-    logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
-    logger.log_tabular('LossPi', average_only=True)
-    logger.log_tabular('LossV', average_only=True)
-    logger.log_tabular('DeltaLossPi', average_only=True)
-    logger.log_tabular('DeltaLossV', average_only=True)
-    logger.log_tabular('Entropy', average_only=True)
-    logger.log_tabular('KL', average_only=True)
-    logger.log_tabular('ClipFrac', average_only=True)
-    logger.log_tabular('StopIter', average_only=True)
-    logger.log_tabular('Time', time.time()-start_time)
-    logger.dump_tabular()
+        logger.log_tabular('VVals', with_min_and_max=True)
+        logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
+        logger.log_tabular('LossPi', average_only=True)
+        logger.log_tabular('LossV', average_only=True)
+        logger.log_tabular('DeltaLossPi', average_only=True)
+        logger.log_tabular('DeltaLossV', average_only=True)
+        logger.log_tabular('Entropy', average_only=True)
+        logger.log_tabular('KL', average_only=True)
+        logger.log_tabular('ClipFrac', average_only=True)
+        logger.log_tabular('StopIter', average_only=True)
+        logger.log_tabular('Time', time.time()-start_time)
+        logger.dump_tabular()
 
 
 if __name__ == '__main__':
