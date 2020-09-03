@@ -1,5 +1,5 @@
 from gym import Space
-from gym.spaces import prng
+
 
 class ListActionSpace(Space):
     """
@@ -30,7 +30,7 @@ class ListActionSpace(Space):
 
     def sample(self):
         # first sample which action to pick
-        action = prng.np_random.randint(self.n)
+        action = self.np_random.randint(self.n)
         # sample the sub action space (parameters for the main action)
         if self.spaces[action][1] is None:
             parameters = None

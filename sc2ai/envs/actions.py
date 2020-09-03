@@ -4,13 +4,20 @@ from sc2ai.envs import game_info
 from gym.spaces.multi_discrete import MultiDiscrete
 import numpy as np
 import logging
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
 
+class ActionVectorType(Enum):
+    ACTION_TYPE = 1
+    SCALAR = 2
+    SPATIAL = 3
+
+
 def retrieve_parameter_size_vector(arg_type, feature_screen_size, feature_minimap_size):
     if arg_type.sizes == (0, 0):
-        if arg_type is actions.TYPES.screen:
+        if arg_type is actions.TYPES.screen or arg_type is actions.TYPES.screen2:
             return feature_screen_size ** 2
         elif arg_type is actions.TYPES.minimap:
             return feature_minimap_size ** 2
@@ -22,7 +29,7 @@ def retrieve_parameter_size_vector(arg_type, feature_screen_size, feature_minima
 
 def translate_parameter_value(arg_type, value, feature_screen_size, feature_minimap_size):
     if arg_type.sizes == (0, 0):
-        if arg_type is actions.TYPES.screen:
+        if arg_type is actions.TYPES.screen or arg_type is actions.TYPES.screen2:
             return [value // feature_screen_size, value % feature_screen_size]
         elif arg_type is actions.TYPES.minimap:
             return [value // feature_minimap_size, value % feature_minimap_size]
@@ -51,6 +58,10 @@ class ActionSet(ABC):
 
     @abstractmethod
     def transform_action(self, observation, action_values):
+        pass
+
+    @abstractmethod
+    def get_action_spec(self):
         pass
 
     def is_action_available(self, action_index):
@@ -82,11 +93,10 @@ class DefaultActionSet(ActionSet):
     """Store a list of default PySC2 actions in this set.
     Uses a shared parameter space called _parameter_registry."""
 
-    def __init__(self, action_list, reorder_action_id = False,
+    def __init__(self, action_list, reorder_action_id=False,
                  feature_screen_size=game_info.feature_screen_size,
                  feature_minimap_size=game_info.feature_minimap_size):
         super().__init__(action_list)
-        self._argument_types_registry = self.register_argument_types()
         self._reorder_action_id = reorder_action_id
         self._current_num_actions = self._num_actions
         self._parameter_registry = self.register_argument_types()
@@ -100,7 +110,7 @@ class DefaultActionSet(ActionSet):
         for action in self._action_list:
             parameters = action.arg_types
             for parameter in parameters:
-                if not (parameter in registry):
+                if not (parameter.name in action.defaults) and not (parameter in registry):
                     registry[parameter] = count
                     count += 1
         return registry
@@ -120,22 +130,27 @@ class DefaultActionSet(ActionSet):
         return cls(action_list)
 
     def transform_action(self, observation, action_values):
+        # print("action value : ", action_values)
         action_id = action_values[0]
 
         if self._reorder_action_id:
             raise NotImplementedError()
         else:
-            if action_id < 0 or action_id > len(self._action_list):
-                logger.error("The wrong action ID %d from the network output", action_id)
-                raise Exception("The wrong action ID. {}".format(action_id))
-            #if not self._current_available_actions[action_id]:
-
-            action = self._action_list[action_id]
-            parameter_types = action.arg_types
-            parameter_values = []
-            for parameter_type in parameter_types:
-                parameter_values += [action_values[1 + self._parameter_registry[parameter_type]]]
-            transformed_action = action.transform_action(observation, parameter_values)
+            if self.is_action_available(action_id):
+                if action_id < 0 or action_id > len(self._action_list):
+                    logger.error("The wrong action ID %d from the network output", action_id)
+                    raise Exception("The wrong action ID. {}".format(action_id))
+                action = self._action_list[action_id]
+                parameter_types = action.arg_types
+                parameter_values = []
+                for parameter_type in parameter_types:
+                    if parameter_type.name in action.defaults:
+                        parameter_values += [action.defaults[parameter_type.name]]
+                    else:
+                        parameter_values += [action_values[1 + self._parameter_registry[parameter_type]]]
+                transformed_action = action.transform_action(observation, parameter_values)
+            else:
+                transformed_action = self._no_op_action.transform_action(observation, [])
 
         return [transformed_action]
 
@@ -150,11 +165,33 @@ class DefaultActionSet(ActionSet):
         # print(vector)
         return MultiDiscrete(vector)
 
+    def get_action_spec(self):
+        action_spec = list()
+        action_spec.append((ActionVectorType.ACTION_TYPE, self._num_actions))
+        for arg_type in self._parameter_registry:
+            size = retrieve_parameter_size_vector(arg_type,
+                                                  self._feature_screen_size,
+                                                  self._feature_minimap_size)
+            _type = None
+            if arg_type is actions.TYPES.screen or arg_type is actions.TYPES.screen2 or \
+                    arg_type is actions.TYPES.minimap:
+                _type = ActionVectorType.SPATIAL
+            else:
+                _type = ActionVectorType.SCALAR
+            action_spec.append((_type, size))
+        return action_spec
+
+    def report(self):
+        print("---- Action Parameters List ----")
+        for arg_type in self._parameter_registry:
+            print(arg_type.name, self._parameter_registry[arg_type])
+        print("--------------------------------")
+
 
 class Action(ABC):
     """An abstract class for a default action which relies only on the policy network's output"""
+
     def __init__(self, arg_types, **kwargs):
-        self._default_arguments = kwargs
         self._arg_types = arg_types
         self._feature_screen_size = \
             kwargs['feature_screen_size'] if 'feature_screen_size' in kwargs else game_info.feature_screen_size
@@ -174,9 +211,14 @@ class Action(ABC):
     def arg_types(self):
         return self._arg_types
 
+    @property
+    def defaults(self):
+        return self._defaults
+
 
 class AtomAction(Action):
     """A Class made to directly mirror pysc2 523 default actions"""
+
     def __init__(self, function_tuple, **kwargs):
         self.function_tuple = function_tuple
         arg_types = function_tuple.args
@@ -197,15 +239,16 @@ class AtomAction(Action):
 
     def transform_action(self, observation, action_values):
         arg_values = []
-        print(action_values)
-        print(self.__class__)
-        print(self._arg_types)
+        # print(action_values)
+        # print(self.__class__)
+        # print(self._arg_types)
         for i, arg_type in enumerate(self._arg_types):
             if arg_type.name in self._defaults:
                 arg_values += [self._defaults[arg_type.name]]
             else:
-                arg_values += [translate_parameter_value(arg_type, action_values[i], self._feature_screen_size, self._feature_minimap_size)]
-        print(arg_values)
+                arg_values += [translate_parameter_value(arg_type, action_values[i], self._feature_screen_size,
+                                                         self._feature_minimap_size)]
+        # print(arg_values)
         return self.function_tuple(*arg_values)
 
 
@@ -221,7 +264,7 @@ class SelectPointAction(AtomAction):
 
 class SelectRectAction(AtomAction):
     def __init__(self, **kwargs):
-        super().__init__(actions.FUNCTIONS.select_point, **kwargs)
+        super().__init__(actions.FUNCTIONS.select_rect, **kwargs)
 
 
 class SelectArmyAction(AtomAction):

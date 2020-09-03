@@ -11,5 +11,20 @@
         </value>
       </option>
     </inspection_tool>
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <value>
+          <list size="7">
+            <item index="0" class="java.lang.String" itemvalue="absl-py" />
+            <item index="1" class="java.lang.String" itemvalue="tensorflow" />
+            <item index="2" class="java.lang.String" itemvalue="pytest" />
+            <item index="3" class="java.lang.String" itemvalue="pylint" />
+            <item index="4" class="java.lang.String" itemvalue="pysc2" />
+            <item index="5" class="java.lang.String" itemvalue="gym" />
+            <item index="6" class="java.lang.String" itemvalue="ray" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
   </profile>
 </component>

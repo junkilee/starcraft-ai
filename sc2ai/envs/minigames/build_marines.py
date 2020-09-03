@@ -15,9 +15,10 @@ class BuildMarinesEnv(SingleAgentSC2Env):
             MoveScreenAction(queued="now"),
         ])
 
-        observation_set = CategorizedObservationSet([
-            FeatureScreenSelfUnitFilter(),
-            FeatureScreenNeuralUnitFilter()
+        observation_set = ObservationSet([
+            MapCategory("feature_screen", [
+                FeatureScreenSelfUnitFilter(),
+                FeatureScreenNeutralUnitFilter()])
         ])
 
         super().__init__("BuildMarines", action_set, observation_set, num_players=1,  **kwargs)

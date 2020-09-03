@@ -12,7 +12,7 @@ SC2EnvOptions = namedtuple('SC2EnvOptions', ('map', 'render', 'feature_screen_si
                                              'max_agent_steps', 'game_steps_per_episode', 'max_episodes',
                                              'step_mul',
                                              'agent1_name', 'agent1_race', 'agent2_name', 'agent2_race',
-                                             'difficulty', 'profile', 'trace', 'parallel', 'save_replay'))
+                                             'difficulty', 'profile', 'trace', 'parallel', 'save_replay', 'realtime'))
 
 """ The definition of SC2EnvOptions """
 default_env_options = SC2EnvOptions(map=None,
@@ -28,7 +28,7 @@ default_env_options = SC2EnvOptions(map=None,
                                     max_agent_steps=0,
                                     game_steps_per_episode=None,
                                     max_episodes=0,
-                                    step_mul=80,
+                                    step_mul=8,
                                     agent1_name="TrainedAI",
                                     agent1_race="terran",
                                     agent2_name="DefaultAI",
@@ -37,7 +37,8 @@ default_env_options = SC2EnvOptions(map=None,
                                     profile=False,
                                     trace=False,
                                     parallel=1,
-                                    save_replay=True)
+                                    save_replay=True,
+                                    realtime=False)
 """ The default value for the SC2EnvOptions. """
 
 class ActionIDs:

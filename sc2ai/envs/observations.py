@@ -7,9 +7,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 from sc2ai.envs import game_info
 import logging
-from gym.spaces.dict_space import Dict
+from gym.spaces.dict import Dict
 from gym.spaces.box import Box
-from gym.spaces.tuple_space import Tuple
+from gym.spaces.tuple import Tuple
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class ObservationSet:
     def convert_to_gym_observation_spaces(self):
         output_dict = {}
         for category in self._categories:
-            output_dict[category] = category.convert_to_gym_observation_spaces()
+            output_dict[category.name] = category.convert_to_gym_observation_spaces()
         return Dict(output_dict)
 
 
@@ -93,14 +93,16 @@ class MapCategory(Category):
         if self._use_stacked:
             shape = self._filters[0].get_space()
             if len(self._filters) > 1:
-                dimension = (len(self._filters),) + shape
-            print(shape)
+                shape = np.concatenate([[len(self._filters)], shape])
             return Box(low=0.0, high=1.0, shape=shape, dtype=np.float32)
         else:
             output = {}
             for f in self._filters:
                 output[f.name] = Box(low=0.0, high=1.0, shape=f.get_space(), dtype=np.float32)
             return Dict(output)
+
+    def __repr__(self):
+        return self._name
 
 
 class ObservationFilter(ABC):
