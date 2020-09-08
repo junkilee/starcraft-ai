@@ -99,7 +99,7 @@ class DefaultActionSet(ActionSet):
         super().__init__(action_list)
         self._reorder_action_id = reorder_action_id
         self._current_num_actions = self._num_actions
-        self._parameter_registry = self.register_argument_types()
+        self._parameter_registry, self._action_mask = self.register_argument_types()
         self._feature_screen_size = feature_screen_size
         self._feature_minimap_size = feature_minimap_size
         self._no_op_action = NoOpAction()
@@ -108,12 +108,18 @@ class DefaultActionSet(ActionSet):
         registry = {}
         count = 0
         for action in self._action_list:
-            parameters = action.arg_types
-            for parameter in parameters:
+            for parameter in action.arg_types:
                 if not (parameter.name in action.defaults) and not (parameter in registry):
                     registry[parameter] = count
                     count += 1
-        return registry
+        action_mask = np.zeros((len(self._action_list, count + 1)))
+
+        for i, action in enumerate(self._action_list):
+            action_mask[i][0] = 1
+            for parameter in action.arg_types:
+                if not (parameter.name in action.defaults):
+                    action_mask[i][registry.index(parameter) + 1] = 1
+        return registry, action_mask
 
     @classmethod
     def add_all_basic_sc2_actions(cls):
@@ -165,7 +171,7 @@ class DefaultActionSet(ActionSet):
         # print(vector)
         return MultiDiscrete(vector)
 
-    def get_action_spec(self):
+    def get_action_spec_and_action_mask(self):
         action_spec = list()
         action_spec.append((ActionVectorType.ACTION_TYPE, self._num_actions))
         for arg_type in self._parameter_registry:
@@ -179,7 +185,7 @@ class DefaultActionSet(ActionSet):
             else:
                 _type = ActionVectorType.SCALAR
             action_spec.append((_type, size))
-        return action_spec
+        return action_spec, self._action_mask
 
     def report(self):
         print("---- Action Parameters List ----")
