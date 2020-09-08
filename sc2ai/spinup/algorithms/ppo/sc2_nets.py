@@ -54,17 +54,16 @@ class SC2Actor(nn.Module):
 
     def log_prob_from_distributions(self, pis, acts):
         log_probs = list()
-        _id = 0
-        for distribution in pis:
-            action_tuple = self._action_spec[_id]
+        for i, distribution in enumerate(pis):
+            action_tuple = self._action_spec[i]
             if isinstance(distribution, tuple):
                 xy_size = int(math.sqrt(action_tuple[1]))
                 #print(act[_id], xy_size)
-                log_probs.append(distribution[0].log_prob(acts[:, _id] // xy_size) +
-                                 distribution[1].log_prob(acts[:, _id] % xy_size))
+                log_probs.append(self._action_mask[]
+                                 (distribution[0].log_prob(acts[:, i] // xy_size) +
+                                 distribution[1].log_prob(acts[:, i] % xy_size)))
             else:
-                log_probs.append(distribution.log_prob(acts[:, _id]))
-            _id += 1
+                log_probs.append(distribution.log_prob(acts[:, i]))
         return torch.sum(torch.stack(log_probs, 1), 1)
 
     def sample(self, pis):
@@ -99,24 +98,33 @@ class SC2Critic(nn.Module):
 
 
 class SC2AtariNetActorCritic(nn.Module):
-    def __init__(self, observation_space, action_spec=None, hidden_units=256, activation=nn.ReLU,
+    def __init__(self, observation_space, action_spec=None, action_mask=None, hidden_units=256, activation=nn.ReLU,
                  device=torch.device('cpu')):
         super().__init__()
+        self.device = device
+        self._convs_sequence = self._build_sequential_layers(observation_space, hidden_units, activation, device)
+        self._build_policy(self._convs_sequence, hidden_units, action_spec, action_mask)
+        self._build_critic(self._convs_sequence, hidden_units)
+        self.to(device=device)
+
+    def _build_policy(self, convs_sequence, hidden_units, action_spec, action_mask):
+        self.pi = SC2Actor(convs_sequence, hidden_units, action_spec, action_mask, self.device)
+        self.pi.to(device=self.device)
+
+    def _build_critic(self, convs_sequence, hidden_units):
+        self.v = SC2Critic(convs_sequence, hidden_units)
+        self.v.to(device=self.device)
+
+    def _build_sequential_layers(self, observation_space, hidden_units, activation, device):
         self.conv1 = nn.Conv2d(observation_space['feature_screen'].shape[0], 16, 8, stride=4).to(device)
         self.conv2 = nn.Conv2d(16, 32, 4, stride=2).to(device)  # 32 channel 9,9
-        self.convs_sequence = nn.Sequential(self.conv1,
-                                            activation(),
-                                            self.conv2,
-                                            activation(),
-                                            nn.Flatten(),
-                                            nn.Linear(32 * 9 * 9, hidden_units),
-                                            nn.ReLU()).to(device)
-        self.device = device
-        self.pi = SC2Actor(self.convs_sequence, hidden_units, action_spec, device)
-        self.pi.to(device=device)
-        self.v = SC2Critic(self.convs_sequence, hidden_units, device)
-        self.v.to(device=device)
-        self.to(device=device)
+        return nn.Sequential(self.conv1,
+                             activation(),
+                             self.conv2,
+                             activation(),
+                             nn.Flatten(),
+                             nn.Linear(32 * 9 * 9, hidden_units),
+                             nn.ReLU()).to(device)
 
     def step(self, obs):
         with torch.no_grad():
@@ -129,7 +137,39 @@ class SC2AtariNetActorCritic(nn.Module):
     def act(self, obs):
         return self.step(obs)[0]
 
-# class SC2FullyConvActorCritic(nn.Module):
+
+class SC2FullyConvActor(nn.Module):
+    def __init__(self, previous_modules, hidden_units, action_spec, device):
+        super().__init__()
+        self._previous_modules = previous_modules
+        self._hidden_units = hidden_units
+        self._action_spec = action_spec
+        self.logit_nets = list()
+        self.device = device
+        self.to(device)
+
+        print("action register-----------------------------")
+        for action_tuple in self._action_spec:
+            print(action_tuple)
+            if action_tuple[0] is ActionVectorType.ACTION_TYPE:
+                self.logit_nets += [
+                    torch.nn.Sequential(previous_modules, torch.nn.Linear(hidden_units, action_tuple[1])).to(device)]
+            elif action_tuple[0] is ActionVectorType.SCALAR:
+                self.logit_nets += [
+                    torch.nn.Sequential(previous_modules, torch.nn.Linear(hidden_units, action_tuple[1])).to(device)]
+            elif action_tuple[0] is ActionVectorType.SPATIAL:
+                xy_size = int(math.sqrt(action_tuple[1]))
+                self.logit_nets += \
+                    [(torch.nn.Sequential(previous_modules, torch.nn.Linear(hidden_units, xy_size)).to(device),
+                      torch.nn.Sequential(previous_modules, torch.nn.Linear(hidden_units, xy_size)).to(device))]
+            else:
+                raise Exception("Such ActionVectorType is not defined.")
+        print("action register-----------------------------")
+
+
+class SC2FullyConvActorCritic(SC2AtariNetActorCritic):
+    def _build_sequential_layers(self, hidden_units, activation, device):
+
 
 
 # class SC2FullyConvLSTMActorCritic(nn.Module):
