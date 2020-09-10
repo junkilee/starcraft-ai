@@ -113,7 +113,6 @@ class DefaultActionSet(ActionSet):
                     registry[parameter] = count
                     count += 1
         action_mask = np.zeros((len(self._action_list, count + 1)))
-
         for i, action in enumerate(self._action_list):
             action_mask[i][0] = 1
             for parameter in action.arg_types:

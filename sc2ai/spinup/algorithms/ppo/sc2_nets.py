@@ -11,11 +11,12 @@ import math
 
 
 class SC2Actor(nn.Module):
-    def __init__(self, previous_modules, hidden_units, action_spec, device):
+    def __init__(self, previous_modules, hidden_units, action_spec, action_mask, device):
         super().__init__()
         self._previous_modules = previous_modules
         self._hidden_units = hidden_units
         self._action_spec = action_spec
+        self._action_mask = action_mask
         self.logit_nets = list()
         self.device = device
         self.to(device)
@@ -54,6 +55,11 @@ class SC2Actor(nn.Module):
 
     def log_prob_from_distributions(self, pis, acts):
         log_probs = list()
+        masks = list()
+        for act, i in enumerate(acts):
+            masks.append(self._action_mask[act[0]])
+        masks = torch.tensor(masks)
+
         for i, distribution in enumerate(pis):
             action_tuple = self._action_spec[i]
             if isinstance(distribution, tuple):
@@ -64,19 +70,17 @@ class SC2Actor(nn.Module):
                                  distribution[1].log_prob(acts[:, i] % xy_size)))
             else:
                 log_probs.append(distribution.log_prob(acts[:, i]))
-        return torch.sum(torch.stack(log_probs, 1), 1)
+        return torch.sum(torch.mul(torch.stack(log_probs, 1), masks), 1)
 
     def sample(self, pis):
         a_vector = list()
-        _id = 0
-        for distribution in pis:
-            action_tuple = self._action_spec[_id]
+        for distribution, i in enumerate(pis):
+            action_tuple = self._action_spec[i]
             if isinstance(distribution, tuple):
                 xy_size = int(math.sqrt(action_tuple[1]))
                 a_vector.append(distribution[0].sample() * xy_size + distribution[1].sample())
             else:
                 a_vector.append(distribution.sample())
-            _id += 1
         return torch.stack(a_vector, 1)
 
     def forward(self, obs, act=None):

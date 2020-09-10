@@ -91,6 +91,8 @@ def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), 
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
 
+        #
+
         pis, logp = ac.pi(obs, act)
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
@@ -120,8 +122,11 @@ def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), 
         pi_l_old = pi_l_old.item()
         v_l_old = compute_loss_v(data).item()
 
+        # Change this part to combined batch training
+
         for i in range(train_pi_iters):
-            print("training_pi...")
+            # do mini batch training instead of full batch
+            print("training pi and v ...")
             sys.stdout.flush()
             pi_optimizer.zero_grad()
             loss_pi, pi_info = compute_loss_pi(data)
@@ -133,16 +138,14 @@ def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), 
             mpi_avg_grads(ac.pi)
             pi_optimizer.step()
 
-        logger.store(StopIter=i)
-
-        for i in range(train_v_iters):
-            print("training_v...")
-            sys.stdout.flush()
             vf_optimizer.zero_grad()
             loss_v = compute_loss_v(data)
             loss_v.backward()
             mpi_avg_grads(ac.v)
             vf_optimizer.step()
+
+        logger.store(StopIter=i)
+
 
         kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
         logger.store(LossPi=pi_l_old, LossV=v_l_old, KL=kl, Entropy=ent, ClipFrac=cf,
