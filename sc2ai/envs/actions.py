@@ -61,7 +61,7 @@ class ActionSet(ABC):
         pass
 
     @abstractmethod
-    def get_action_spec(self):
+    def get_action_spec_and_action_mask(self):
         pass
 
     def is_action_available(self, action_index):
@@ -112,12 +112,12 @@ class DefaultActionSet(ActionSet):
                 if not (parameter.name in action.defaults) and not (parameter in registry):
                     registry[parameter] = count
                     count += 1
-        action_mask = np.zeros((len(self._action_list, count + 1)))
+        action_mask = np.zeros((len(self._action_list), count + 1))
         for i, action in enumerate(self._action_list):
             action_mask[i][0] = 1
             for parameter in action.arg_types:
                 if not (parameter.name in action.defaults):
-                    action_mask[i][registry.index(parameter) + 1] = 1
+                    action_mask[i][registry[parameter] + 1] = 1
         return registry, action_mask
 
     @classmethod

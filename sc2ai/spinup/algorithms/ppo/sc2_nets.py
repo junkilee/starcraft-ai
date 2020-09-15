@@ -56,17 +56,16 @@ class SC2Actor(nn.Module):
     def log_prob_from_distributions(self, pis, acts):
         log_probs = list()
         masks = list()
-        for act, i in enumerate(acts):
-            masks.append(self._action_mask[act[0]])
-        masks = torch.tensor(masks)
+        for i, act in enumerate(acts):
+            masks.append(self._action_mask[int(act[0].item())])
+        masks = torch.tensor(masks, device=self.device, dtype=torch.int32)
 
         for i, distribution in enumerate(pis):
             action_tuple = self._action_spec[i]
             if isinstance(distribution, tuple):
                 xy_size = int(math.sqrt(action_tuple[1]))
                 #print(act[_id], xy_size)
-                log_probs.append(self._action_mask[]
-                                 (distribution[0].log_prob(acts[:, i] // xy_size) +
+                log_probs.append((distribution[0].log_prob(acts[:, i] // xy_size) +
                                  distribution[1].log_prob(acts[:, i] % xy_size)))
             else:
                 log_probs.append(distribution.log_prob(acts[:, i]))
@@ -74,14 +73,19 @@ class SC2Actor(nn.Module):
 
     def sample(self, pis):
         a_vector = list()
-        for distribution, i in enumerate(pis):
+        for i, distribution in enumerate(pis):
             action_tuple = self._action_spec[i]
             if isinstance(distribution, tuple):
                 xy_size = int(math.sqrt(action_tuple[1]))
                 a_vector.append(distribution[0].sample() * xy_size + distribution[1].sample())
             else:
                 a_vector.append(distribution.sample())
-        return torch.stack(a_vector, 1)
+        act_id = a_vector[0].item()
+        #print(self._action_mask)
+        #print(torch.stack(a_vector, 1),
+        #      torch.tensor(self._action_mask[act_id], device=self.device, dtype=torch.int32).unsqueeze(0))
+        return torch.mul(torch.stack(a_vector, 1),
+                         torch.tensor(self._action_mask[act_id], device=self.device, dtype=torch.int32).unsqueeze(0))
 
     def forward(self, obs, act=None):
         pis = self.distributions(obs)
@@ -116,7 +120,7 @@ class SC2AtariNetActorCritic(nn.Module):
         self.pi.to(device=self.device)
 
     def _build_critic(self, convs_sequence, hidden_units):
-        self.v = SC2Critic(convs_sequence, hidden_units)
+        self.v = SC2Critic(convs_sequence, hidden_units, self.device)
         self.v.to(device=self.device)
 
     def _build_sequential_layers(self, observation_space, hidden_units, activation, device):
@@ -173,7 +177,6 @@ class SC2FullyConvActor(nn.Module):
 
 class SC2FullyConvActorCritic(SC2AtariNetActorCritic):
     def _build_sequential_layers(self, hidden_units, activation, device):
-
-
+        pass
 
 # class SC2FullyConvLSTMActorCritic(nn.Module):

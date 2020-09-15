@@ -56,7 +56,7 @@ class PPOBuffer:
 
 
 def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), seed=0, steps_per_epoch=10000,
-        epochs=100, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4, vf_lr=1e-3, train_iters=40, lam=0.97,
+        epochs=100, gamma=0.99, clip_ratio=0.2, lr=3e-4, vf_coeff=0.5, ent_coeff=0.01, train_iters=10, lam=0.97,
         max_ep_len=1000, target_kl=0.03, batch_size=64, logger_kwargs=dict(), save_freq=5, device=torch.device("cpu")):
     setup_pytorch_for_mpi()
 
@@ -78,7 +78,8 @@ def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), 
     print("obs_dim, act_dim = ", obs_dim, act_dim)
 
     action_spec, action_mask = env.action_set.get_action_spec_and_action_mask()
-    ac = actor_critic(env.observation_gym_space, action_spec=action_spec, device=device, **ac_kwargs)
+    ac = actor_critic(env.observation_gym_space,
+                      action_spec=action_spec, action_mask=action_mask, device=device, **ac_kwargs)
 
     sync_params(ac)
 
@@ -88,10 +89,9 @@ def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), 
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
     buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam, device)
 
-    def compute_loss_pi(data):
-        obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
-
-        #
+    def compute_loss_pi(data, start, end):
+        obs, act, adv, logp_old = data['obs'][start:end], data['act'][start:end], \
+                                  data['adv'][start:end], data['logp'][start:end]
 
         pis, logp = ac.pi(obs, act)
         ratio = torch.exp(logp - logp_old)
@@ -99,54 +99,59 @@ def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), 
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
         approx_kl = (logp_old - logp).mean().item()
-        ent = pis[0].entropy().mean().item()
+        ent = 0
+        for pi in pis:
+            if isinstance(pi, tuple):
+                ent += pi[0].entropy().mean() + pi[1].entropy().mean()
+            else:
+                ent += pi.entropy().mean()
         clipped = ratio.gt(1 + clip_ratio) | ratio.lt(1 - clip_ratio)
         clipfrac = torch.as_tensor(clipped, dtype=torch.float32, device=device).mean().item()
-        pi_info = dict(kl=approx_kl, ent=ent, cf=clipfrac)
+        pi_info = dict(kl=approx_kl, ent=ent.item(), cf=clipfrac)
 
-        return loss_pi, pi_info
+        return loss_pi, ent, pi_info
 
-    def compute_loss_v(data):
-        obs, ret = data['obs'], data['ret']
+    def compute_loss_v(data, start, end):
+        obs, ret = data['obs'][start:end], data['ret'][start:end]
         return ((ac.v(obs) - ret) ** 2).mean()
 
-    pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
-    vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
-
+    optimizer = Adam(ac.parameters(), lr=lr)
     logger.setup_pytorch_saver(ac)
 
     def update():
         data = buf.get()
 
-        pi_l_old, pi_info_old = compute_loss_pi(data)
+        pi_l_old, ent_old, pi_info_old = compute_loss_pi(data, 0, len(data['obs']))
         pi_l_old = pi_l_old.item()
-        v_l_old = compute_loss_v(data).item()
+        ent_old = ent_old.item()
+        v_l_old = compute_loss_v(data, 0, len(data['obs'])).item()
 
         # Change this part to combined batch training
 
-        for i in range(train_pi_iters):
+        for i in range(train_iters):
             # do mini batch training instead of full batch
             print("training pi and v ...")
             sys.stdout.flush()
-            pi_optimizer.zero_grad()
-            loss_pi, pi_info = compute_loss_pi(data)
-            kl = mpi_avg(pi_info['kl'])
-            if kl > 1.5 * target_kl:
-                logger.log('Early stopping at step %d due to reaching max kl.' % i)
-                break
-            loss_pi.backward()
-            mpi_avg_grads(ac.pi)
-            pi_optimizer.step()
-
-            vf_optimizer.zero_grad()
-            loss_v = compute_loss_v(data)
-            loss_v.backward()
-            mpi_avg_grads(ac.v)
-            vf_optimizer.step()
+            data_length = len(data['obs'])
+            for j in range(data_length // batch_size):
+                print("doing batch {}".format(j))
+                sys.stdout.flush()
+                start = batch_size * j
+                end = batch_size * (j + 1)
+                if end > data_length:
+                    end = data_length
+                optimizer.zero_grad()
+                loss_pi, entropy, pi_info = compute_loss_pi(data, start, end)
+                loss_v = compute_loss_v(data, start, end)
+                #kl = mpi_avg(pi_info['kl'])
+                #if kl > 1.5 * target_kl:
+                #    logger.log('Early stopping at step %d due to reaching max kl.' % i)
+                #    break
+                (loss_pi + vf_coeff * loss_v + ent_coeff * entropy).backward()
+                mpi_avg_grads(ac)
+                optimizer.step()
 
         logger.store(StopIter=i)
-
-
         kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
         logger.store(LossPi=pi_l_old, LossV=v_l_old, KL=kl, Entropy=ent, ClipFrac=cf,
                      DeltaLossPi=(loss_pi.item() - pi_l_old), DeltaLossV=(loss_v.item() - v_l_old))
