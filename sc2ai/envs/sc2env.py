@@ -205,7 +205,8 @@ class SingleAgentSC2Env(gym.Env):
             logging.info("Keyboard Interruption.")
             return None, 0, True, {}
         except Exception:
-            logging.exception("An unexpected exception occured.")
+            logging.exception("An unexpected exception occurred.")
+            self._sc2_env = None
             return None, 0, True, {}
         reward = timestep.reward
         return timestep.observation, reward, timestep.step_type == StepType.LAST, {}
