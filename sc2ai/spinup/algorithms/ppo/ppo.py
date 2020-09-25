@@ -56,8 +56,8 @@ class PPOBuffer:
 
 
 def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), seed=0, steps_per_epoch=10000,
-        epochs=100, gamma=0.99, clip_ratio=0.2, lr=3e-4, vf_coeff=0.5, ent_coeff=0.01, train_iters=10, lam=0.97,
-        max_ep_len=1000, target_kl=0.03, batch_size=64, logger_kwargs=dict(), save_freq=5, device=torch.device("cpu")):
+        epochs=1000000, gamma=0.99, clip_ratio=0.2, lr=3e-4, vf_coeff=0.5, ent_coeff=0.01, train_iters=10, lam=0.97,
+        max_ep_len=1000, target_kl=0.03, batch_size=64, logger_kwargs=dict(), save_freq=100, device=torch.device("cpu")):
     setup_pytorch_for_mpi()
 
     print("device - ", device)
@@ -147,7 +147,7 @@ def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), 
                 #if kl > 1.5 * target_kl:
                 #    logger.log('Early stopping at step %d due to reaching max kl.' % i)
                 #    break
-                (loss_pi + vf_coeff * loss_v + ent_coeff * entropy).backward()
+                (loss_pi + vf_coeff * loss_v - ent_coeff * entropy).backward()
                 mpi_avg_grads(ac)
                 optimizer.step()
 
@@ -196,7 +196,7 @@ def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), 
                 o, ep_ret, ep_len = env.reset(), 0, 0
 
         if (epoch % save_freq == 0) or (epoch == epochs - 1):
-            logger.save_state({'env': env}, None)
+            logger.save_state({'env': env}, epoch)
 
         print("update started....")
         sys.stdout.flush()

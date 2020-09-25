@@ -210,7 +210,7 @@ class FeatureScreenUnitHitPointFilter(FeatureScreenFilter):
         Returns:
             A numpy array
         """
-        return observation.feature_screen.unit_hit_points_ratio / 256.0
+        return observation.feature_screen.unit_hit_points_ratio / 255.0
 
     def __call__(self, observation):
         return self._filter(observation)
