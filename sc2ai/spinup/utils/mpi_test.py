@@ -18,10 +18,11 @@ class TestModule(nn.Module):
 
 
 def mpi_test():
-    n_epochs = 500
-    n_examples = 30
+    n_epochs = 1000
+    n_examples = 50
     n_in = 30
     n_out = 3
+    write_freq = 50
     # generate baseline
     W = np.random.rand(n_out, n_in)
     mod = TestModule(n_in, n_out)
@@ -37,14 +38,25 @@ def mpi_test():
             out_mat[j] = np.matmul(W, inp_mat[j].reshape(-1, 1)).flatten()
         mod_out = mod(torch.tensor(inp_mat, dtype=torch.float32))
         optimizer.zero_grad()
-        loss = torch.sqrt(torch.sum(torch.tensor(out_mat, dtype=torch.float32) - mod_out))
+        loss = torch.square(torch.sum(torch.tensor(out_mat, dtype=torch.float32) - mod_out))
         loss.backward()
         mpi_avg_grads(mod)
+        print("{}:{} ====================".format(i, proc_id()), mod.mlp.weight.grad)
         optimizer.step()
-        f.write("{}, {}\n".format(i, loss.float()))
+        if i % write_freq == 0:
+            f.write("{}, {}\n".format(i, loss.float()))
         print(datetime.datetime.now(), proc_id(), loss)
     print('ended {}'.format(i))
+    torch.save(mod, "{}-module.pt".format(proc_id()))
     f.close()
+
+
+def mpi_avg_test():
+    for i in range(5):
+        r = np.random.randint(0, 5)
+        a = mpi_avg(r)
+        print("i:{}, id:{}, a:{}".format(i, proc_id(), a))
+
 
 if __name__ == '__main__':
     import argparse

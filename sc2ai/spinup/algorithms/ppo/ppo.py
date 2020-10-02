@@ -38,12 +38,9 @@ class PPOBuffer:
         path_slice = slice(self.path_start_idx, self.ptr)
         rews = np.append(self.rew_buf[path_slice], last_val)
         vals = np.append(self.val_buf[path_slice], last_val)
-
         deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
         self.adv_buf[path_slice] = core.discount_cumsum(deltas, self.gamma * self.lam)
-
         self.ret_buf[path_slice] = core.discount_cumsum(rews, self.gamma)[:-1]
-
         self.path_start_idx = self.ptr
 
     def get(self):
@@ -165,12 +162,21 @@ def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), 
             a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32).to(device).unsqueeze(0))
 
             #print("a v logp -- ", a, v, logp)
+            #print(o.shape)
+
+            #for i in range(84):
+            #    for j in range(84):
+            #        print("{:3.1f} ".format((o[3, i, j])), end='')
+            #    print()
+
             print(".", end='')
             sys.stdout.flush()
 
             next_o, r, d, _ = env.step(a)
             ep_ret += r
             ep_len += 1
+
+            #print(a, r, v, logp)
 
             buf.store(o, a, r, v, logp)
             logger.store(VVals=v)
