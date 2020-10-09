@@ -18,14 +18,14 @@ if __name__ == '__main__':
     #parser.add_argument('--epochs', type=int, default=1000000)
     parser.add_argument('--cpu', type=int, default=1)
     parser.add_argument('--steps', type=int, default=1000)
-    parser.add_argument('--epochs', type=int, default=10)
-    parser.add_argument('--exp_name', type=str, default='ppo_sc2')
+    parser.add_argument('--epochs', type=int, default=10000)
+    parser.add_argument('--exp_name', type=str, default='ppognn_sc2')
     args = parser.parse_args()
 
     mpi_fork(args.cpu)  # run parallel code with mpi
 
     from sc2ai.spinup.utils.run_utils import setup_logger_kwargs
-    logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
+    logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed, data_dir = '/users/mli115/scratch/pposc', datestamp=True)
 
     if torch.cuda.is_available():
         dev = "cuda:0"
@@ -35,6 +35,6 @@ if __name__ == '__main__':
     print("device - ", dev, device)
 
     ppo(lambda: make_sc2env(map=args.map_name), actor_critic=SC2AtariNetActorCritic,
-        ac_kwargs=dict(), # hidden_sizes=[args.hid]*args.l
+        ac_kwargs=dict(usegnn=True), # hidden_sizes=[args.hid]*args.l
         seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
         logger_kwargs=logger_kwargs, device=device)

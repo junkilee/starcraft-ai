@@ -12,6 +12,8 @@ from sc2ai.spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, m
 from sc2ai.spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 
 
+
+
 class PPOBuffer:
     def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95, device=torch.device('cpu')):
         self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
@@ -179,7 +181,7 @@ def ppo(env_fn, actor_critic=sc2_nets.SC2AtariNetActorCritic, ac_kwargs=dict(), 
             #print(a, r, v, logp)
 
             buf.store(o, a, r, v, logp)
-            logger.store(VVals=v)
+            logger.store(VVals=v, incre=True)
 
             o = next_o
 

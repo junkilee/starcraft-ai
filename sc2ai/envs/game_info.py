@@ -3,8 +3,8 @@ from pysc2.lib import actions
 from pysc2.lib import features
 from collections import namedtuple
 
-feature_screen_size = 84
-feature_minimap_size = 64
+feature_screen_size = 32
+feature_minimap_size = 32
 
 SC2EnvOptions = namedtuple('SC2EnvOptions', ('map', 'render', 'feature_screen_size', 'feature_minimap_size',
                                              'rgb_screen_size', 'rgb_minimap_size', 'action_space',

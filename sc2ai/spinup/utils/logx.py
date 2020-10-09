@@ -11,6 +11,8 @@ import warnings
 from sc2ai.spinup.utils.mpi_tools import proc_id, mpi_statistics_scalar
 from sc2ai.spinup.utils.serialization_utils import convert_json
 
+from torch.utils.tensorboard import SummaryWriter
+
 
 color2num = dict(
     gray=30,
@@ -133,31 +135,52 @@ class EpochLogger(Logger):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.epoch_dict = dict()
+        self.global_step = 0
+        self.global_epoch = 0
+        self.tboardwriter = SummaryWriter(self.output_dir)
 
     def store(self, **kwargs):
         for k, v in kwargs.items():
+            if k == 'incre':
+                self.global_step += 1
+                continue
             if not(k in self.epoch_dict.keys()):
                 self.epoch_dict[k] = []
             self.epoch_dict[k].append(v)
+            self.tboardwriter.add_scalar('StepProgress/'+str(k), v, self.global_step)
+            self.tboardwriter.flush()
+
 
     def log_tabular(self, key, val=None, with_min_and_max=False, average_only=False):
+        if key == 'Epoch':
+            self.global_epoch = val
         if val is not None:
             super().log_tabular(key, val)
+            self.tboardwriter.add_scalar('EpProgress/'+str(key), val, self.global_epoch)
         else:
             v = self.epoch_dict[key]
             vals = np.concatenate(v) if isinstance(v[0], np.ndarray) and len(v[0].shape) > 0 else v
             stats = mpi_statistics_scalar(vals, with_min_and_max=with_min_and_max)
             super().log_tabular(key if average_only else 'Average' + key, stats[0])
+            self.tboardwriter.add_scalar('EpProgress/'+key if average_only else 'Average' + key, stats[0], self.global_epoch)
             if not average_only:
                 super().log_tabular('Std' + key, stats[1])
+                self.tboardwriter.add_scalar('EpProgress/'+'Std' + key, stats[1], self.global_epoch)
             if with_min_and_max:
                 super().log_tabular('Max' + key, stats[3])
                 super().log_tabular('Min' + key, stats[2])
+                self.tboardwriter.add_scalar('EpProgress/'+'Min' + key, stats[2], self.global_epoch)
+                self.tboardwriter.add_scalar('EpProgress/'+'Max' + key, stats[3], self.global_epoch)
+        self.tboardwriter.flush()
         self.epoch_dict[key] = []
 
     def get_stats(self, key):
         v = self.epoch_dict[key]
         vals = np.concatenate(v) if isinstance(v[0], np.ndarray) and len(v[0].shape) > 0 else v
         return mpi_statistics_scalar(vals)
+
+    def dump_tabular(self):
+        self.tboardwriter.close()
+        super().dump_tabular()
 
 
